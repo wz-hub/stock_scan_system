@@ -8,7 +8,13 @@ ETH 资金费率套利策略
 - 赚取资金费率收益
 """
 
-from src.strategy_base import BaseStrategy
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+try:
+    from src.strategy_base import BaseStrategy
+except:
+    from strategy_base import BaseStrategy
 from typing import Dict, Optional, Any
 
 

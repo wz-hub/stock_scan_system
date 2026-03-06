@@ -7,7 +7,13 @@ BTC 均线金叉策略
 - 当短期均线下穿长期均线时，产生卖出信号
 """
 
-from src.strategy_base import BaseStrategy
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+try:
+    from src.strategy_base import BaseStrategy
+except:
+    from strategy_base import BaseStrategy
 import pandas as pd
 from typing import Dict, Optional, Any
 
