@@ -10,11 +10,14 @@ ETH 资金费率套利策略
 
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.dirname(__file__))
+
 try:
-    from src.strategy_base import BaseStrategy
-except:
     from strategy_base import BaseStrategy
+except:
+    class BaseStrategy:
+        pass
+
 from typing import Dict, Optional, Any
 
 
@@ -34,7 +37,7 @@ class ETHFundingStrategy(BaseStrategy):
         扫描资金费率套利机会
         
         Args:
-            history: 历史资金费率数据
+            history: 历史数据
             current: 当前数据（包含 funding_rate）
             
         Returns:

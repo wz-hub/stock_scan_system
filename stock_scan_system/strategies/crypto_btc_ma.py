@@ -9,12 +9,22 @@ BTC 均线金叉策略
 
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.dirname(__file__))
+
 try:
-    from src.strategy_base import BaseStrategy
-except:
     from strategy_base import BaseStrategy
-import pandas as pd
+except:
+    # Fallback for direct execution
+    class BaseStrategy:
+        pass
+
+try:
+    import pandas as pd
+    HAS_PANDAS = True
+except:
+    HAS_PANDAS = False
+    pd = None
+
 from typing import Dict, Optional, Any
 
 
@@ -29,31 +39,50 @@ class BTCMAStrategy(BaseStrategy):
     def description(self) -> str:
         return "BTC 均线金叉策略（5 日/20 日）"
     
-    def scan(self, history: pd.DataFrame, current: Dict) -> Optional[Dict[str, Any]]:
+    def scan(self, history: Dict, current: Dict) -> Optional[Dict[str, Any]]:
         """
         扫描买入信号
         
         Args:
-            history: 历史数据（包含 open/high/low/close/volume）
+            history: 历史数据
             current: 当前数据
             
         Returns:
             信号字典或 None
         """
-        if len(history) < 20:
+        if not HAS_PANDAS:
+            # 简化版，不需要 pandas
+            price = current.get('price', 0)
+            change = current.get('change_24h', 0)
+            
+            # 简单策略：24h 跌幅>5% 时考虑买入
+            if change < -5:
+                return {
+                    'type': '潜在买入机会',
+                    'signal': 'buy',
+                    'strategy': 'btc_ma_cross',
+                    'description': f'BTC 24h 跌幅{change:.2f}%，可能是买入机会',
+                    'confidence': 60,
+                    'entry_price': price,
+                    'stop_loss': price * 0.95,
+                    'target_price': price * 1.10,
+                }
+            return None
+        
+        # 完整版需要 pandas 和历史数据
+        if not isinstance(history, pd.DataFrame) or len(history) < 20:
             return None
         
         # 计算均线
         history['ma5'] = history['close'].rolling(5).mean()
         history['ma20'] = history['close'].rolling(20).mean()
         
-        # 获取最新数据
+        # 判断金叉/死叉
         ma5_current = history['ma5'].iloc[-1]
         ma20_current = history['ma20'].iloc[-1]
         ma5_prev = history['ma5'].iloc[-2]
         ma20_prev = history['ma20'].iloc[-2]
         
-        # 判断金叉（短期上穿长期）
         if ma5_current > ma20_current and ma5_prev <= ma20_prev:
             return {
                 'type': '买入信号',
@@ -62,12 +91,11 @@ class BTCMAStrategy(BaseStrategy):
                 'description': f'BTC 均线金叉（MA5={ma5_current:.2f} 上穿 MA20={ma20_current:.2f}）',
                 'confidence': 75,
                 'entry_price': current.get('price', 0),
-                'stop_loss': current.get('price', 0) * 0.95,  # 5% 止损
-                'target_price': current.get('price', 0) * 1.10,  # 10% 目标
+                'stop_loss': current.get('price', 0) * 0.95,
+                'target_price': current.get('price', 0) * 1.10,
             }
         
-        # 判断死叉（短期下穿长期）
-        if ma5_current < ma20_current and ma5_prev >= ma20_prev:
+        elif ma5_current < ma20_current and ma5_prev >= ma20_prev:
             return {
                 'type': '卖出信号',
                 'signal': 'sell',
