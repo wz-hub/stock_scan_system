@@ -13,5 +13,11 @@
     "send_on_new_signal": true,
     "send_daily_summary": true,
     "summary_time": "08:00"
+  },
+  "signal_tracking": {
+    "enabled": true,
+    "update_interval_minutes": 5,
+    "auto_close": true,
+    "notify_on_exit": true
   }
 }
