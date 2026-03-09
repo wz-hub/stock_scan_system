@@ -58,6 +58,9 @@ base_symbols = scan_symbols_config.get('base_symbols', ['BTCUSDT', 'ETHUSDT'])
 min_confidence = filters_config.get('min_confidence', 60)
 feishu_webhook = feishu_config.get('webhook_url', '')
 
+print(f"飞书 webhook: {'✅ 已配置' if feishu_webhook else '❌ 未配置'}")
+print(f"最低置信度：{min_confidence}%")
+
 print("📊 全市场信号扫描 - 半小时版")
 print("="*80)
 print(f"扫描时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -138,7 +141,7 @@ scanned_count = 0
 mtf_signals_count = 0
 
 # 加载飞书通知
-feishu_webhook = config.get('feishu_webhook', '')
+# feishu_webhook 已经在上面从 notification.json 读取了
 notifier = FeishuNotifier(feishu_webhook) if feishu_webhook else None
 
 # 先扫描多周期策略
@@ -222,15 +225,34 @@ if new_signals and notifier:
     for signal_dict in new_signals:
         # 重建 Signal 对象
         from signal_generator import Signal
-        signal = Signal(**signal_dict)
-        message = signal.to_message()
+        from feishu_notifier import SignalMessage
         
-        # 推送
+        signal = Signal(**signal_dict)
+        
+        # 转换为 SignalMessage 格式
+        signal_msg = SignalMessage(
+            signal_id=signal.signal_id,
+            symbol=signal.symbol,
+            action=signal.action,
+            direction=signal.direction,
+            current_price=float(signal.current_price),
+            entry_price=float(signal.entry_price),
+            stop_loss_price=float(signal.stop_loss_price) if signal.stop_loss_price else None,
+            take_profit_price=float(signal.take_profit_price) if signal.take_profit_price else None,
+            confidence=signal.confidence,
+            reason=signal.reason,
+            timestamp=signal.timestamp
+        )
+        
+        # 推送文本消息
         try:
-            notifier.send_message(message)
-            print(f"  ✅ 推送：{signal_dict['symbol']} {signal_dict['action']}")
+            result = notifier.send_text(signal_msg)
+            if result.get('success'):
+                print(f"  ✅ 推送：{signal_dict['symbol']} {signal_dict['action']}")
+            else:
+                print(f"  ❌ 推送失败：{result}")
         except Exception as e:
-            print(f"  ❌ 推送失败：{e}")
+            print(f"  ❌ 推送异常：{e}")
         
         import time
         time.sleep(0.5)  # 避免飞书限流

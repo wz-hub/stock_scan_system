@@ -19,15 +19,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from backtest.data_loader import DataLoader
 from strategies import (
-    TrendFollowingStrategy,
-    Reversal123Strategy,
-    SupportResistanceStrategy,
-    PatternTradingStrategy,
-    MACrossStrategy,
-    VolatilityBreakoutStrategy,
-    BollingerBandsStrategy,
-    RSIStrategy,
-    BreakoutStrategy,
     MultiTimeframeStrategy,
     VolatilitySqueezeStrategy,
     MoneyFlowStrategy,
@@ -240,15 +231,6 @@ class SignalGenerator:
             self.feishu_notifier = None
         
         self.strategies = {
-            'trend_following': TrendFollowingStrategy(),
-            'reversal_123': Reversal123Strategy(),
-            'support_resistance': SupportResistanceStrategy(),
-            'pattern': PatternTradingStrategy(),
-            'ma_cross': MACrossStrategy(),
-            'volatility_breakout': VolatilityBreakoutStrategy(),
-            'bollinger': BollingerBandsStrategy(),
-            'rsi': RSIStrategy(),
-            'breakout': BreakoutStrategy(),
             'multi_timeframe': MultiTimeframeStrategy(),
             'volatility_squeeze': VolatilitySqueezeStrategy(),
             'money_flow': MoneyFlowStrategy(),
@@ -256,15 +238,6 @@ class SignalGenerator:
         }
         
         self.strategy_stats = {
-            'trend_following': {'win_rate': 48.6, 'sharpe': 0.30, 'last_10': '+5.2%'},
-            'reversal_123': {'win_rate': 52.5, 'sharpe': 0.96, 'last_10': '+12.8%'},
-            'support_resistance': {'win_rate': 55.0, 'sharpe': 0.48, 'last_10': '+3.5%'},
-            'pattern': {'win_rate': 58.0, 'sharpe': 0.80, 'last_10': '+8.9%'},
-            'ma_cross': {'win_rate': 52.0, 'sharpe': 0.83, 'last_10': '+7.2%'},
-            'volatility_breakout': {'win_rate': 56.5, 'sharpe': 0.74, 'last_10': '+6.5%'},
-            'bollinger': {'win_rate': 53.3, 'sharpe': 0.27, 'last_10': '+2.1%'},
-            'rsi': {'win_rate': 54.0, 'sharpe': 0.38, 'last_10': '+4.3%'},
-            'breakout': {'win_rate': 55.5, 'sharpe': 0.39, 'last_10': '+5.8%'},
             'multi_timeframe': {'win_rate': 58.0, 'sharpe': 1.05, 'last_10': '+15.3%'},
             'volatility_squeeze': {'win_rate': 55.0, 'sharpe': 1.20, 'last_10': '+18.5%'},
             'money_flow': {'win_rate': 60.0, 'sharpe': 1.15, 'last_10': '+22.1%'},
@@ -401,7 +374,7 @@ class SignalGenerator:
         stats = self.strategy_stats.get(strategy_name, {})
         
         # 生成信号 ID
-        signal_id = f"SIG-{datetime.now().strftime('%Y%m%d')}-{symbol.split('-')[0]}-{strategy_name.upper()[:4]}-{len(signals_df):03d}"
+        signal_id = f"SIG-{datetime.now(BEIJING_TZ).strftime('%Y%m%d')}-{symbol.split('-')[0]}-{strategy_name.upper()[:4]}-{len(signals_df):03d}"
         
         # 获取信号理由
         pattern = latest.get('pattern', '') or latest.get('breakout_type', '') or latest.get('rsi_signal_type', '') or latest.get('bb_signal_type', '') or ''
@@ -458,7 +431,7 @@ class SignalGenerator:
             strategy_sharpe=stats.get('sharpe', 0),
             max_risk_amount=round(self.capital * self.risk_per_trade, 0),
             warnings=warnings,
-            valid_until=(datetime.now() + timedelta(days=1)).isoformat()
+            valid_until=(datetime.now(BEIJING_TZ) + timedelta(days=1)).isoformat()
         )
         
         return signal
@@ -484,6 +457,11 @@ class SignalGenerator:
                            scan_last_days: int = 30) -> List[Signal]:
         """扫描所有策略生成信号"""
         signals = []
+        
+        # 强制转换价格字段为数值类型
+        for col in ['open', 'high', 'low', 'close', 'volume']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
         
         for name, strategy in self.strategies.items():
             try:
@@ -544,7 +522,7 @@ class SignalGenerator:
             trend_medium = trend_short
             
             signal = Signal(
-                signal_id=f"MTF-{datetime.now().strftime('%Y%m%d%H')}-{symbol.split('-')[0]}",
+                signal_id=f"MTF-{datetime.now(BEIJING_TZ).strftime('%Y%m%d%H')}-{symbol.split('-')[0]}",
                 timestamp=datetime.now(BEIJING_TZ).strftime('%Y-%m-%dT%H:%M:%S'),
                 symbol=symbol.replace('USDT', '-USD'),
                 timeframe='1H',
@@ -576,7 +554,7 @@ class SignalGenerator:
                 strategy_sharpe=1.05,
                 max_risk_amount=self.capital * self.risk_per_trade,
                 warnings=[],
-                valid_until=(datetime.now() + timedelta(hours=4)).isoformat(),
+                valid_until=(datetime.now(BEIJING_TZ) + timedelta(hours=4)).isoformat(),
                 holding_period=signal_dict.get('holding_period'),
                 stop_type=signal_dict.get('stop_type'),
                 take_profit_type=signal_dict.get('take_profit_type')
@@ -736,7 +714,7 @@ class SignalGenerator:
         
         signal = Signal(
             signal_id=f"SIG-TEMP",
-            timestamp=datetime.now().isoformat(),
+            timestamp=datetime.now(BEIJING_TZ).isoformat(),
             symbol=symbol,
             timeframe="1D",
             strategy_name=self.strategies[strategy_name].name,
@@ -767,7 +745,7 @@ class SignalGenerator:
             strategy_sharpe=stats.get('sharpe', 0),
             max_risk_amount=round(self.capital * self.risk_per_trade, 0),
             warnings=warnings,
-            valid_until=(datetime.now() + timedelta(days=1)).isoformat()
+            valid_until=(datetime.now(BEIJING_TZ) + timedelta(days=1)).isoformat()
         )
         
         return signal
@@ -806,7 +784,7 @@ def main():
     output_dir = Path(args.output)
     output_dir.mkdir(exist_ok=True)
     
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    timestamp = datetime.now(BEIJING_TZ).strftime('%Y%m%d_%H%M%S')
     
     print(f"\n生成 {len(signals)} 个信号:\n")
     
