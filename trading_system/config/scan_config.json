@@ -1,0 +1,29 @@
+{
+  "scan_symbols": {
+    "enabled": true,
+    "mode": "hybrid",
+    "volume_top_n": 100,
+    "money_flow_inflow_top": 20,
+    "money_flow_outflow_top": 20,
+    "base_symbols": [
+      "BTCUSDT",
+      "ETHUSDT"
+    ],
+    "exclude_stablecoins": true,
+    "min_volume_usdt": 5000000
+  },
+  "scan_settings": {
+    "weekdays_interval_hours": 1,
+    "weekend_interval_hours": 4,
+    "scan_last_days": 7,
+    "auto_push_feishu": true,
+    "push_min_confidence": 60,
+    "push_min_priority": "LOW"
+  },
+  "money_flow_settings": {
+    "enabled": true,
+    "update_interval_hours": 1,
+    "push_threshold_usd": 50000000,
+    "push_threshold_pct": 10
+  }
+}

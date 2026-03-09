@@ -1,0 +1,9 @@
+{
+  "enabled": true,
+  "provider": "dashscope",
+  "api_url": "https://coding.dashscope.aliyuncs.com/v1/chat/completions",
+  "api_key": "sk-sp-5c84ca223f9d49c48ebb55eb6539d559",
+  "model": "qwen3.5-plus",
+  "temperature": 0.3,
+  "max_tokens": 1000
+}

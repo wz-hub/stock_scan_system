@@ -1,0 +1,19 @@
+{
+  "binance_apis": {
+    "openInterest": "\u6301\u4ed3\u91cf\u6570\u636e",
+    "openInterestHist": "\u6301\u4ed3\u91cf\u5386\u53f2",
+    "topLongShortAccountRatio": "\u5927\u6237\u8d26\u6237\u591a\u7a7a\u6bd4",
+    "topLongShortPositionRatio": "\u6301\u4ed3\u91cf\u591a\u7a7a\u6bd4"
+  },
+  "third_party": [
+    "CryptoQuant",
+    "Glassnode",
+    "Whale Alert",
+    "Arkham"
+  ],
+  "recommended": [
+    "\u6301\u4ed3\u91cf\u53d8\u5316",
+    "\u5927\u6237\u591a\u7a7a\u6bd4",
+    "\u4ea4\u6613\u91cf\u53d8\u5316"
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "波动率收缩": {
+    "total_trades": 15,
+    "winning_trades": 2,
+    "losing_trades": 6,
+    "win_rate": 0.25,
+    "avg_win": 932.1660547399794,
+    "avg_loss": 1799.2734253642875,
+    "profit_factor": 0.5180791543960305,
+    "total_pnl": -8931.308442705766,
+    "total_return": -0.08931308442705765,
+    "max_drawdown": -0.10134994299250051,
+    "sharpe_ratio": -0.6449835815681261,
+    "final_equity": 91068.69155729425,
+    "strategy_name": "波动率收缩"
+  },
+  "资金流追踪": {
+    "total_trades": 34,
+    "winning_trades": 7,
+    "losing_trades": 10,
+    "win_rate": 0.4117647058823529,
+    "avg_win": 3803.644795934193,
+    "avg_loss": 521.0349518719954,
+    "profit_factor": 7.30017205615152,
+    "total_pnl": 21415.1640528194,
+    "total_return": 0.214151640528194,
+    "max_drawdown": -0.06605048758037897,
+    "sharpe_ratio": 0.7293133902227366,
+    "final_equity": 121415.16405281941,
+    "strategy_name": "资金流追踪"
+  },
+  "流动性猎杀": {
+    "total_trades": 8,
+    "winning_trades": 3,
+    "losing_trades": 1,
+    "win_rate": 0.75,
+    "avg_win": 3440.3078984015265,
+    "avg_loss": 4571.418509514686,
+    "profit_factor": 0.7525690092125822,
+    "total_pnl": 5749.505185689894,
+    "total_return": 0.05749505185689893,
+    "max_drawdown": -0.06243668441806372,
+    "sharpe_ratio": 0.3221984662990772,
+    "final_equity": 105749.5051856899,
+    "strategy_name": "流动性猎杀"
+  }
+}
