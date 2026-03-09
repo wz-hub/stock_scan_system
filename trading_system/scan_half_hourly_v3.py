@@ -123,6 +123,15 @@ def scan_all_strategies_for_symbol(args):
 print(f"\n💾 初始化数据库...")
 db = MarketDatabase()
 
+# 初始化信号追踪器
+try:
+    from signal_tracker import SignalTracker
+    tracker = SignalTracker()
+    print(f"✅ 信号追踪器已初始化")
+except Exception as e:
+    print(f"⚠️ 追踪器初始化失败：{e}")
+    tracker = None
+
 # 加载缓存
 cache = load_cache()
 cached_signals = cache.get('signals', [])
@@ -216,19 +225,32 @@ print(f"   发现信号：{total_signals}")
 print(f"   └─ 新信号：{mtf_signals_count} 个 ⭐")
 print(f"   └─ 重复信号：{len(repeated_signals)} 个")
 
-# 推送（去重：同币种同方向只推一次）
+# 推送（去重：同币种同策略，平仓前不重复推送）
 if new_signals and notifier:
-    print(f"\n📤 推送 {len(new_signals)} 个新信号...")
+    print(f"\n📤 推送新信号...")
     
-    pushed_signals = set()  # 记录已推送的信号
+    # 获取活跃信号（用于去重）
+    try:
+        active_signals = tracker.get_active_signals()
+        active_keys = {f"{s['symbol']}-{s['strategy_name']}" for s in active_signals}
+        print(f"当前活跃信号：{len(active_keys)} 个")
+    except:
+        active_keys = set()
+    
+    pushed_signals = set()  # 本次已推送
     
     for signal_dict in new_signals:
-        # 生成去重 key（币种 + 方向）
-        dedup_key = f"{signal_dict['symbol']}-{signal_dict['direction']}"
+        # 生成去重 key（币种 + 策略）
+        dedup_key = f"{signal_dict['symbol']}-{signal_dict['strategy_name']}"
         
-        # 检查是否已推送
+        # 检查是否有活跃信号（平仓前不重复推送）
+        if dedup_key in active_keys:
+            print(f"  ⏭️ 跳过：{signal_dict['symbol']} ({signal_dict['strategy_name']}) - 已有活跃信号")
+            continue
+        
+        # 检查本次是否已推送
         if dedup_key in pushed_signals:
-            print(f"  ⏭️ 跳过：{signal_dict['symbol']} {signal_dict['direction']}（已推送）")
+            print(f"  ⏭️ 跳过：{signal_dict['symbol']}（本次已推送）")
             continue
         
         signal_msg = SignalMessage(
@@ -251,6 +273,12 @@ if new_signals and notifier:
             if result.get('success'):
                 print(f"  ✅ 推送：{signal_dict['symbol']} {signal_dict['action']} ({signal_dict['strategy_name']})")
                 pushed_signals.add(dedup_key)
+                
+                # 写入追踪（新增信号）
+                try:
+                    tracker.add_signal(signal_dict)
+                except Exception as e:
+                    print(f"  ⚠️ 追踪失败：{e}")
             else:
                 print(f"  ❌ 推送失败：{result}")
         except Exception as e:
@@ -264,13 +292,17 @@ elif new_signals:
 else:
     print(f"\n✅ 无新信号，不推送")
 
-# 保存
+# 保存缓存
 cache['signals'] = [signal_hash(s) for s in new_signals]
 cache['last_scan'] = datetime.now().isoformat()
 save_cache(cache)
 
+# 保存所有信号到数据库（包括重复的，用于追踪）
 for signal_dict in new_signals:
-    db.save_signal(signal_hash(signal_dict), signal_dict)
+    try:
+        db.save_signal(signal_hash(signal_dict), signal_dict)
+    except Exception as e:
+        pass  # 不影响主流程
 
 db.log_scan(
     symbols_count=scanned_count,

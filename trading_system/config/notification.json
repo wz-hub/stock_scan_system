@@ -5,7 +5,7 @@
     "send_card": true
   },
   "filters": {
-    "min_confidence": 60,
+    "min_confidence": 80,
     "priority_levels": ["HIGH", "MEDIUM", "LOW"],
     "symbols": ["BTC-USD", "ETH-USD", "*"]
   },
