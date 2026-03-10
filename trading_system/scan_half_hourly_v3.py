@@ -317,6 +317,7 @@ save_cache(cache)
 for signal_dict in new_signals:
     try:
         db.save_signal(signal_hash(signal_dict), signal_dict)
+        db.connection.commit()  # 确保提交
     except Exception as e:
         pass  # 不影响主流程
 
