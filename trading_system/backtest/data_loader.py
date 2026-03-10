@@ -1,121 +1,82 @@
 """
-数据获取模块
-支持从 CSV 文件或 API 获取数据
+数据加载器 - 用于回测和历史数据分析
 """
 import pandas as pd
-import numpy as np
 from pathlib import Path
 from typing import Optional
-import yfinance as yf
 
 
 class DataLoader:
-    """数据加载器"""
+    """数据加载器 - 支持 CSV 加载和 Yahoo Finance 下载"""
     
-    def __init__(self, data_dir: str = 'data'):
-        self.data_dir = Path(data_dir)
-        self.data_dir.mkdir(parents=True, exist_ok=True)
+    def __init__(self, cache_dir: Optional[str] = None):
+        """初始化数据加载器"""
+        self.cache_dir = Path(cache_dir) if cache_dir else Path('data')
+        self.cache_dir.mkdir(exist_ok=True)
     
-    def load_csv(self, filepath: str, **kwargs) -> pd.DataFrame:
-        """从 CSV 加载数据"""
-        # 尝试自动检测日期列
-        df = pd.read_csv(filepath, index_col=0, parse_dates=True, **kwargs)
-        return self._standardize_columns(df)
-    
-    def download_yahoo(self, symbol: str, start_date: str, end_date: str, 
-                       save: bool = True) -> pd.DataFrame:
-        """从 Yahoo Finance 下载数据"""
-        ticker = yf.Ticker(symbol)
-        df = ticker.history(start=start_date, end=end_date)
+    def load_csv(self, file_path: str, **kwargs) -> pd.DataFrame:
+        """
+        从 CSV 文件加载数据
         
-        if df.empty:
-            raise ValueError(f"No data found for {symbol}")
+        Args:
+            file_path: CSV 文件路径
+            **kwargs: 传递给 pd.read_csv 的参数
+            
+        Returns:
+            DataFrame，索引为日期
+        """
+        df = pd.read_csv(file_path, **kwargs)
         
-        df = self._standardize_columns(df)
+        # 尝试解析日期列
+        if 'Date' in df.columns:
+            df['Date'] = pd.to_datetime(df['Date'])
+            df.set_index('Date', inplace=True)
+        elif 'date' in df.columns:
+            df['date'] = pd.to_datetime(df['date'])
+            df.set_index('date', inplace=True)
         
-        if save:
-            filepath = self.data_dir / f"{symbol.replace('/', '_')}.csv"
-            df.to_csv(filepath)
-            print(f"Data saved to {filepath}")
+        # 确保索引是 DatetimeIndex
+        if not isinstance(df.index, pd.DatetimeIndex):
+            df.index = pd.to_datetime(df.index)
         
         return df
     
-    def generate_synthetic(self, days: int = 500, start_price: float = 100.0,
-                          volatility: float = 0.02, trend: float = 0.0001) -> pd.DataFrame:
-        """生成模拟数据用于测试"""
-        dates = pd.date_range(end=pd.Timestamp.today(), periods=days, freq='D')
+    def download_yahoo(self, symbol: str, start_date: str, end_date: str, **kwargs) -> pd.DataFrame:
+        """
+        从 Yahoo Finance 下载数据
         
-        # 生成价格序列（几何布朗运动）
-        returns = np.random.normal(trend, volatility, days)
-        close = start_price * np.cumprod(1 + returns)
-        
-        # 生成 OHLC
-        df = pd.DataFrame(index=dates)
-        df['close'] = close
-        df['open'] = close * (1 + np.random.uniform(-0.01, 0.01, days))
-        df['high'] = df[['open', 'close']].max(axis=1) * (1 + np.abs(np.random.normal(0, 0.01, days)))
-        df['low'] = df[['open', 'close']].min(axis=1) * (1 - np.abs(np.random.normal(0, 0.01, days)))
-        df['volume'] = np.random.randint(100000, 1000000, days)
-        
-        return self._standardize_columns(df)
+        Args:
+            symbol: 交易标的符号
+            start_date: 开始日期 (YYYY-MM-DD)
+            end_date: 结束日期 (YYYY-MM-DD)
+            **kwargs: 额外参数
+            
+        Returns:
+            DataFrame，包含 OHLCV 数据
+        """
+        try:
+            import yfinance as yf
+            ticker = yf.Ticker(symbol)
+            df = ticker.history(start=start_date, end=end_date, **kwargs)
+            
+            if df.empty:
+                raise ValueError(f"No data found for symbol: {symbol}")
+            
+            return df
+            
+        except ImportError:
+            raise ImportError("yfinance not installed. Install with: pip install yfinance")
+        except Exception as e:
+            raise RuntimeError(f"Failed to download data for {symbol}: {e}")
     
-    def _standardize_columns(self, df: pd.DataFrame) -> pd.DataFrame:
-        """标准化列名"""
-        # 重命名列
-        column_mapping = {
-            'Open': 'open',
-            'High': 'high',
-            'Low': 'low',
-            'Close': 'close',
-            'Volume': 'volume',
-            'Adj Close': 'adj_close'
-        }
+    def save_csv(self, df: pd.DataFrame, file_path: str, **kwargs):
+        """
+        保存 DataFrame 到 CSV 文件
         
-        df = df.rename(columns=column_mapping)
-        
-        # 确保有小写列名
-        required_columns = ['open', 'high', 'low', 'close']
-        for col in required_columns:
-            if col not in df.columns:
-                # 尝试找大写版本
-                upper_col = col.upper()
-                if upper_col in df.columns:
-                    df[col] = df[upper_col]
-                else:
-                    raise ValueError(f"Missing required column: {col}")
-        
-        # 确保有成交量（如果没有则填充）
-        if 'volume' not in df.columns:
-            df['volume'] = 100000
-        
-        # 按日期排序
-        df = df.sort_index()
-        
-        # 删除空值
-        df = df.dropna()
-        
-        return df
-
-
-def load_data(symbol: str = None, start_date: str = '2020-01-01', 
-              end_date: str = '2024-12-31', use_synthetic: bool = False) -> pd.DataFrame:
-    """便捷函数加载数据"""
-    loader = DataLoader()
-    
-    if use_synthetic:
-        print("Using synthetic data...")
-        return loader.generate_synthetic(days=500)
-    
-    if symbol:
-        print(f"Downloading data for {symbol}...")
-        return loader.download_yahoo(symbol, start_date, end_date)
-    
-    # 默认加载本地 CSV
-    csv_files = list(loader.data_dir.glob('*.csv'))
-    if csv_files:
-        print(f"Loading {csv_files[0]}...")
-        return loader.load_csv(str(csv_files[0]))
-    
-    # 没有数据则生成模拟数据
-    print("No data found, generating synthetic data...")
-    return loader.generate_synthetic(days=500)
+        Args:
+            df: 要保存的 DataFrame
+            file_path: 输出文件路径
+            **kwargs: 传递给 df.to_csv 的参数
+        """
+        Path(file_path).parent.mkdir(exist_ok=True, parents=True)
+        df.to_csv(file_path, **kwargs)
