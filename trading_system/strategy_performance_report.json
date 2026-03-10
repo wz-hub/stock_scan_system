@@ -1,0 +1,14 @@
+{
+  "timestamp": "2026-03-10T16:26:56.063683",
+  "type": "strategy_performance_analysis",
+  "stats": {
+    "total_signals": 22,
+    "long_signals": 1,
+    "short_signals": 21,
+    "profitable": 5,
+    "losing": 17,
+    "win_rate": 22.727272727272727,
+    "avg_pnl": -2.1705527450366775,
+    "big_losers": 15
+  }
+}
