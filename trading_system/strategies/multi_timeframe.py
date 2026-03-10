@@ -7,11 +7,15 @@ import numpy as np
 from typing import Dict, Optional, Tuple
 from datetime import datetime
 
+from .base import BaseStrategy
 
-class MultiTimeframeStrategy:
+
+class MultiTimeframeStrategy(BaseStrategy):
     """多周期共振策略"""
     
     def __init__(self):
+        super().__init__(name="Multi-Timeframe Resonance", category="Multi-Timeframe")
+        
         # 时间周期配置
         self.trend_timeframe = '1D'      # 趋势周期（定方向）
         self.signal_timeframe = '4H'     # 信号周期（找机会）
@@ -25,113 +29,6 @@ class MultiTimeframeStrategy:
         # 共振要求
         self.require_all_align = True    # 是否要求所有周期同向
     
-    def calculate_ma(self, df: pd.DataFrame, period: int) -> float:
-        """计算均线"""
-        if len(df) < period:
-            return None
-        return df['close'].iloc[-period:].mean()
-    
-    def get_trend(self, df: pd.DataFrame) -> str:
-        """
-        判断趋势方向
-        返回：'BULL' / 'BEAR' / 'NEUTRAL'
-        """
-        if len(df) < self.trend_ma:
-            return 'NEUTRAL'
-        
-        close = df['close'].iloc[-1]
-        ma20 = self.calculate_ma(df, self.fast_ma)
-        ma50 = self.calculate_ma(df, self.slow_ma)
-        ma200 = self.calculate_ma(df, self.trend_ma)
-        
-        # 多头排列
-        if close > ma20 > ma50 > ma200:
-            return 'BULL'
-        
-        # 空头排列
-        if close < ma20 < ma50 < ma200:
-            return 'BEAR'
-        
-        # 均线纠缠，震荡
-        return 'NEUTRAL'
-    
-    def get_signal(self, df: pd.DataFrame) -> str:
-        """
-        获取交易信号
-        返回：'BUY' / 'SELL' / 'WAIT'
-        """
-        if len(df) < self.fast_ma:
-            return 'WAIT'
-        
-        close = df['close'].iloc[-1]
-        ma20 = self.calculate_ma(df, self.fast_ma)
-        ma50 = self.calculate_ma(df, self.slow_ma)
-        
-        # 金叉：快线上穿慢线
-        if ma20 > ma50:
-            prev_ma20 = df['close'].iloc[-self.fast_ma-1:-1].mean()
-            prev_ma50 = df['close'].iloc[-self.slow_ma-1:-1].mean()
-            if prev_ma20 <= prev_ma50:  # 刚发生金叉
-                return 'BUY'
-        
-        # 死叉：快线下穿慢线
-        if ma20 < ma50:
-            prev_ma20 = df['close'].iloc[-self.fast_ma-1:-1].mean()
-            prev_ma50 = df['close'].iloc[-self.slow_ma-1:-1].mean()
-            if prev_ma20 >= prev_ma50:  # 刚发生死叉
-                return 'SELL'
-        
-        # 已经金叉状态，价格回调到均线附近
-        if ma20 > ma50 and close < ma20 and close > ma50:
-            return 'BUY'  # 回调买入机会
-        
-        if ma20 < ma50 and close > ma20 and close < ma50:
-            return 'SELL'  # 反弹卖出机会
-        
-        return 'WAIT'
-    
-    def get_entry(self, df: pd.DataFrame) -> str:
-        """
-        获取精确入场点
-        返回：'GO' / 'WAIT'
-        """
-        if len(df) < 20:
-            return 'WAIT'
-        
-        # 用 RSI 找超买超卖
-        delta = df['close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / loss
-        rsi = 100 - (100 / (1 + rs))
-        current_rsi = rsi.iloc[-1]
-        
-        # 用 ATR 看波动率
-        high_low = df['high'] - df['low']
-        high_close = np.abs(df['high'] - df['close'].shift())
-        low_close = np.abs(df['low'] - df['close'].shift())
-        ranges = pd.concat([high_low, high_close, low_close], axis=1)
-        true_range = np.max(ranges, axis=1)
-        atr = true_range.rolling(14).mean()
-        
-        # 入场条件：RSI 不过度超买/超卖 + 波动率正常
-        if 30 < current_rsi < 70:
-            return 'GO'
-        
-        # RSI 超卖但趋势向上 → 可能是好机会
-        if current_rsi < 30:
-            ma20 = self.calculate_ma(df, self.fast_ma)
-            if df['close'].iloc[-1] > ma20:
-                return 'GO'
-        
-        # RSI 超买但趋势向下 → 可能是好机会
-        if current_rsi > 70:
-            ma20 = self.calculate_ma(df, self.fast_ma)
-            if df['close'].iloc[-1] < ma20:
-                return 'GO'
-        
-        return 'WAIT'
-    
     def analyze(self, data_dict: Dict[str, pd.DataFrame]) -> Dict:
         """
         多周期分析
@@ -143,7 +40,7 @@ class MultiTimeframeStrategy:
             分析结果字典
         """
         result = {
-            'strategy_name': 'Multi-Timeframe Resonance',
+            'strategy_name': self.name,
             'timestamp': datetime.now().isoformat(),
             'timeframes': {}
         }
@@ -163,16 +60,16 @@ class MultiTimeframeStrategy:
             tf_result = {
                 'status': 'OK',
                 'close': df['close'].iloc[-1],
-                'ma20': self.calculate_ma(df, self.fast_ma),
-                'ma50': self.calculate_ma(df, self.slow_ma),
+                'ma20': self._calculate_ma(df, self.fast_ma),
+                'ma50': self._calculate_ma(df, self.slow_ma),
             }
             
             if tf == self.trend_timeframe:
-                tf_result['trend'] = self.get_trend(df)
+                tf_result['trend'] = self._get_trend(df)
             elif tf == self.signal_timeframe:
-                tf_result['signal'] = self.get_signal(df)
+                tf_result['signal'] = self._get_signal(df)
             elif tf == self.entry_timeframe:
-                tf_result['entry'] = self.get_entry(df)
+                tf_result['entry'] = self._get_entry(df)
             
             result['timeframes'][tf] = tf_result
         
@@ -244,6 +141,95 @@ class MultiTimeframeStrategy:
         
         return result
     
+    def _get_trend(self, df: pd.DataFrame) -> str:
+        """
+        判断趋势方向
+        返回：'BULL' / 'BEAR' / 'NEUTRAL'
+        """
+        if len(df) < self.trend_ma:
+            return 'NEUTRAL'
+        
+        close = df['close'].iloc[-1]
+        ma20 = self._calculate_ma(df, self.fast_ma)
+        ma50 = self._calculate_ma(df, self.slow_ma)
+        ma200 = self._calculate_ma(df, self.trend_ma)
+        
+        # 多头排列
+        if close > ma20 > ma50 > ma200:
+            return 'BULL'
+        
+        # 空头排列
+        if close < ma20 < ma50 < ma200:
+            return 'BEAR'
+        
+        # 均线纠缠，震荡
+        return 'NEUTRAL'
+    
+    def _get_signal(self, df: pd.DataFrame) -> str:
+        """
+        获取交易信号
+        返回：'BUY' / 'SELL' / 'WAIT'
+        """
+        if len(df) < self.fast_ma:
+            return 'WAIT'
+        
+        close = df['close'].iloc[-1]
+        ma20 = self._calculate_ma(df, self.fast_ma)
+        ma50 = self._calculate_ma(df, self.slow_ma)
+        
+        # 金叉：快线上穿慢线
+        if ma20 > ma50:
+            prev_ma20 = df['close'].iloc[-self.fast_ma-1:-1].mean()
+            prev_ma50 = df['close'].iloc[-self.slow_ma-1:-1].mean()
+            if prev_ma20 <= prev_ma50:  # 刚发生金叉
+                return 'BUY'
+        
+        # 死叉：快线下穿慢线
+        if ma20 < ma50:
+            prev_ma20 = df['close'].iloc[-self.fast_ma-1:-1].mean()
+            prev_ma50 = df['close'].iloc[-self.slow_ma-1:-1].mean()
+            if prev_ma20 >= prev_ma50:  # 刚发生死叉
+                return 'SELL'
+        
+        # 已经金叉状态，价格回调到均线附近
+        if ma20 > ma50 and close < ma20 and close > ma50:
+            return 'BUY'  # 回调买入机会
+        
+        if ma20 < ma50 and close > ma20 and close < ma50:
+            return 'SELL'  # 回调卖出机会
+        
+        return 'WAIT'
+    
+    def _get_entry(self, df: pd.DataFrame) -> str:
+        """
+        获取精确入场点
+        返回：'GO' / 'WAIT'
+        """
+        if len(df) < 20:
+            return 'WAIT'
+        
+        # 用 RSI 找超买超卖
+        rsi = self._calculate_rsi(df, 14)
+        current_rsi = rsi.iloc[-1]
+        
+        # 入场条件：RSI 不过度超买/超卖 + 波动率正常
+        if 30 < current_rsi < 70:
+            return 'GO'
+        
+        # RSI 超卖但趋势向上 → 可能是好机会
+        if current_rsi < 30:
+            ma20 = self._calculate_ma(df, self.fast_ma)
+            if df['close'].iloc[-1] > ma20:
+                return 'GO'
+        
+        # RSI 超买但趋势向下 → 可能是好机会
+        if current_rsi > 70:
+            ma20 = self._calculate_ma(df, self.fast_ma)
+            if df['close'].iloc[-1] < ma20:
+                return 'GO'
+        
+        return 'WAIT'
+    
     def _find_nearest_levels(self, df: pd.DataFrame, current_price: float, direction: str) -> Dict:
         """
         找出最近的支撑阻力位，用于设定止损止盈
@@ -251,7 +237,6 @@ class MultiTimeframeStrategy:
         Returns:
             {'stop_level': float, 'tp_level': float}
         """
-        # 找最近的 Swing 高低点
         swing_highs = []
         swing_lows = []
         
@@ -341,7 +326,7 @@ class MultiTimeframeStrategy:
             # 保底：2 倍 ATR
             if analysis['final_direction'] == 'LONG':
                 stop_loss_price = current_price - 2 * atr
-                stop_loss_pct = stop_loss_pct = 2 * atr / current_price * 100
+                stop_loss_pct = 2 * atr / current_price * 100
             else:
                 stop_loss_price = current_price + 2 * atr
                 stop_loss_pct = 2 * atr / current_price * 100
@@ -387,7 +372,7 @@ class MultiTimeframeStrategy:
         
         return {
             'strategy_name': analysis['strategy_name'],
-            'strategy_category': 'Multi-Timeframe',
+            'strategy_category': self.category,
             'symbol': symbol,
             'action': analysis['final_action'],
             'direction': analysis['final_direction'],
@@ -409,27 +394,6 @@ class MultiTimeframeStrategy:
             'take_profit_type': 'technical' if levels['tp_level'] else 'multiple_R',
             'holding_period': holding_period
         }
-    
-    def _calculate_atr(self, df: pd.DataFrame, period: int = 14) -> float:
-        """计算 ATR"""
-        if df is None or len(df) < period:
-            return 0.0
-        
-        high_low = df['high'] - df['low']
-        high_close = np.abs(df['high'] - df['close'].shift())
-        low_close = np.abs(df['low'] - df['close'].shift())
-        ranges = pd.concat([high_low, high_close, low_close], axis=1)
-        true_range = np.max(ranges, axis=1)
-        atr = true_range.rolling(period).mean()
-        return atr.iloc[-1] if len(atr) > 0 else 0.0
-
-
-    def generate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        兼容老接口（返回空 DataFrame）
-        多周期策略需要特殊处理，不在这个框架内运行
-        """
-        return pd.DataFrame()
 
 
 # 便捷函数

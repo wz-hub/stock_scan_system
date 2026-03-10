@@ -1,0 +1,57 @@
+# 交易系统统一配置文件
+# 支持环境变量覆盖：TRADING_<SECTION>_<KEY>
+
+# AI 配置
+ai:
+  enabled: true
+  provider: "dashscope"
+  api_url: "https://coding.dashscope.aliyuncs.com/v1/chat/completions"
+  api_key: "${DASHSCOPE_API_KEY:sk-sp-5c84ca223f9d49c48ebb55eb6539d559}"
+  model: "qwen3.5-plus"
+  temperature: 0.3
+  max_tokens: 1000
+
+# 通知配置
+notification:
+  feishu:
+    webhook_url: "${FEISHU_WEBHOOK_URL:https://open.feishu.cn/open-apis/bot/v2/hook/555c2a9b-538a-478e-8a4a-9eb3953fe54b}"
+    enabled: true
+    send_card: true
+  filters:
+    min_confidence: 80
+    priority_levels: ["HIGH", "MEDIUM", "LOW"]
+    symbols: ["BTC-USD", "ETH-USD", "*"]
+  send_on_new_signal: true
+  send_daily_summary: true
+  summary_time: "08:00"
+  signal_tracking:
+    enabled: true
+    update_interval_minutes: 5
+    auto_close: true
+    notify_on_exit: true
+
+# 扫描配置
+scan:
+  scan_symbols:
+    enabled: true
+    mode: "hybrid"
+    volume_top_n: 100
+    money_flow_inflow_top: 20
+    money_flow_outflow_top: 20
+    base_symbols:
+      - "BTCUSDT"
+      - "ETHUSDT"
+    exclude_stablecoins: true
+    min_volume_usdt: 5000000
+  scan_settings:
+    weekdays_interval_hours: 1
+    weekend_interval_hours: 4
+    scan_last_days: 7
+    auto_push_feishu: true
+    push_min_confidence: 60
+    push_min_priority: "LOW"
+  money_flow_settings:
+    enabled: true
+    update_interval_hours: 1
+    push_threshold_usd: 50000000
+    push_threshold_pct: 10

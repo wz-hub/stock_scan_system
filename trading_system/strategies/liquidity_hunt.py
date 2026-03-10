@@ -7,11 +7,15 @@ import numpy as np
 from typing import Dict, Optional, List, Tuple
 from datetime import datetime
 
+from .base import BaseStrategy
 
-class LiquidityHuntStrategy:
+
+class LiquidityHuntStrategy(BaseStrategy):
     """流动性猎杀策略"""
     
     def __init__(self):
+        super().__init__(name="Liquidity Hunt", category="Market Structure")
+        
         # Swing 高低点检测参数
         self.swing_lookback = 20  # 前后各看 20 根 K 线
         
@@ -21,7 +25,7 @@ class LiquidityHuntStrategy:
         # 确认 K 线数量
         self.confirmation_candles = 3
     
-    def find_swing_highs(self, df: pd.DataFrame) -> List[Tuple[int, float]]:
+    def _find_swing_highs(self, df: pd.DataFrame) -> List[Tuple[int, float]]:
         """
         找出 Swing Highs（局部高点）
         返回：[(index, price), ...]
@@ -41,7 +45,7 @@ class LiquidityHuntStrategy:
         
         return swing_highs
     
-    def find_swing_lows(self, df: pd.DataFrame) -> List[Tuple[int, float]]:
+    def _find_swing_lows(self, df: pd.DataFrame) -> List[Tuple[int, float]]:
         """
         找出 Swing Lows（局部低点）
         返回：[(index, price), ...]
@@ -61,12 +65,12 @@ class LiquidityHuntStrategy:
         
         return swing_lows
     
-    def find_recent_swing_levels(self, df: pd.DataFrame, lookback: int = 100) -> Dict:
+    def _find_recent_swing_levels(self, df: pd.DataFrame, lookback: int = 100) -> Dict:
         """
         找出最近的 Swing 高低点
         """
-        swing_highs = self.find_swing_highs(df)
-        swing_lows = self.find_swing_lows(df)
+        swing_highs = self._find_swing_highs(df)
+        swing_lows = self._find_swing_lows(df)
         
         # 只保留最近 lookback 根 K 线内的
         current_idx = len(df) - 1
@@ -84,7 +88,7 @@ class LiquidityHuntStrategy:
             'lows': recent_lows[:5]     # 最近的 5 个低点
         }
     
-    def check_liquidity_grab(self, df: pd.DataFrame, level: float, level_type: str) -> Optional[str]:
+    def _check_liquidity_grab(self, df: pd.DataFrame, level: float, level_type: str) -> Optional[str]:
         """
         检查是否有流动性猎杀
         
@@ -130,7 +134,7 @@ class LiquidityHuntStrategy:
             分析结果字典
         """
         result = {
-            'strategy_name': 'Liquidity Hunt',
+            'strategy_name': self.name,
             'timestamp': datetime.now().isoformat(),
             'status': 'NO_SIGNAL'
         }
@@ -140,7 +144,7 @@ class LiquidityHuntStrategy:
             return result
         
         # 找出最近的 Swing 高低点
-        swing_levels = self.find_recent_swing_levels(df)
+        swing_levels = self._find_recent_swing_levels(df)
         result['swing_levels'] = swing_levels
         
         current_price = df['close'].iloc[-1]
@@ -149,7 +153,7 @@ class LiquidityHuntStrategy:
         grab_signals = []
         
         for idx, high_price in swing_levels['highs']:
-            grab = self.check_liquidity_grab(df, high_price, 'high')
+            grab = self._check_liquidity_grab(df, high_price, 'high')
             if grab == 'GRAB_HIGH':
                 grab_signals.append({
                     'type': 'GRAB_HIGH',
@@ -159,7 +163,7 @@ class LiquidityHuntStrategy:
         
         # 检查每个低点是否有猎杀
         for idx, low_price in swing_levels['lows']:
-            grab = self.check_liquidity_grab(df, low_price, 'low')
+            grab = self._check_liquidity_grab(df, low_price, 'low')
             if grab == 'GRAB_LOW':
                 grab_signals.append({
                     'type': 'GRAB_LOW',
@@ -263,20 +267,6 @@ class LiquidityHuntStrategy:
         
         return result
     
-    def _calculate_atr(self, df: pd.DataFrame, period: int = 14) -> float:
-        """计算 ATR"""
-        if len(df) < period:
-            return df['close'].iloc[-1] * 0.02
-        
-        high_low = df['high'] - df['low']
-        high_close = np.abs(df['high'] - df['close'].shift())
-        low_close = np.abs(df['low'] - df['close'].shift())
-        ranges = pd.concat([high_low, high_close, low_close], axis=1)
-        true_range = np.max(ranges, axis=1)
-        atr = true_range.rolling(period).mean()
-        
-        return atr.iloc[-1] if len(atr) > 0 and not pd.isna(atr.iloc[-1]) else df['close'].iloc[-1] * 0.02
-    
     def generate_signal(self, df: pd.DataFrame, symbol: str) -> Optional[Dict]:
         """
         生成交易信号
@@ -287,10 +277,7 @@ class LiquidityHuntStrategy:
             return None
         
         current_price = analysis['current_price']
-        atr = self._calculate_atr(df)
         swing_levels = analysis.get('swing_levels', {})
-        
-        # 流动性猎杀的止损应该放在猎杀点外侧
         grab_signals = analysis.get('grab_signals', [])
         best_signal = grab_signals[0] if grab_signals else None
         
@@ -305,10 +292,11 @@ class LiquidityHuntStrategy:
                     take_profit_price = low[1]
                     break
             else:
+                atr = self._calculate_atr(df)
                 take_profit_price = current_price - 3.5 * atr
         else:
             # 做多：止损放在猎杀低点下方
-            stop_loss_price = best_signal['level'] * 0.99 if best_signal else current_price - 2 * atr
+            stop_loss_price = best_signal['level'] * 0.99 if best_signal else current_price - 2 * self._calculate_atr(df)
             stop_loss_pct = (current_price - stop_loss_price) / current_price * 100
             
             # 止盈：找上方阻力
@@ -317,6 +305,7 @@ class LiquidityHuntStrategy:
                     take_profit_price = high[1]
                     break
             else:
+                atr = self._calculate_atr(df)
                 take_profit_price = current_price + 3.5 * atr
         
         take_profit_pct = abs(take_profit_price - current_price) / current_price * 100
@@ -341,7 +330,7 @@ class LiquidityHuntStrategy:
         
         return {
             'strategy_name': analysis['strategy_name'],
-            'strategy_category': 'Market Structure',
+            'strategy_category': self.category,
             'symbol': symbol.replace('USDT', '-USD'),
             'action': analysis['action'],
             'direction': analysis['direction'],
@@ -365,14 +354,6 @@ class LiquidityHuntStrategy:
             'take_profit_type': 'technical',
             'holding_period': holding_period
         }
-
-
-    def generate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        兼容老接口（返回空 DataFrame）
-        此策略使用 generate_signal 方法
-        """
-        return pd.DataFrame()
 
 
 # 便捷函数

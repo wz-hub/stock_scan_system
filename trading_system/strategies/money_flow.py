@@ -7,11 +7,15 @@ import numpy as np
 from typing import Dict, Optional, List
 from datetime import datetime
 
+from .base import BaseStrategy
 
-class MoneyFlowStrategy:
+
+class MoneyFlowStrategy(BaseStrategy):
     """资金流追踪策略"""
     
     def __init__(self):
+        super().__init__(name="Money Flow Tracker", category="Money Flow")
+        
         # 大单阈值（USDT）
         self.large_order_threshold = 10000  # 1 万 USDT 以上算大单
         
@@ -24,7 +28,7 @@ class MoneyFlowStrategy:
         # 价格变化阈值
         self.price_change_threshold = 2.0  # 2% 价格变化
     
-    def analyze_order_flow(self, df: pd.DataFrame) -> Dict:
+    def _analyze_order_flow(self, df: pd.DataFrame) -> Dict:
         """
         分析订单流
         通过价格和成交量变化推断大单动向
@@ -69,7 +73,7 @@ class MoneyFlowStrategy:
         
         return result
     
-    def detect_accumulation(self, df: pd.DataFrame, flow_data: Dict) -> bool:
+    def _detect_accumulation(self, df: pd.DataFrame, flow_data: Dict) -> bool:
         """
         检测吸筹
         特征：大单净流入 + 价格涨幅不大
@@ -88,7 +92,7 @@ class MoneyFlowStrategy:
         
         return False
     
-    def detect_distribution(self, df: pd.DataFrame, flow_data: Dict) -> bool:
+    def _detect_distribution(self, df: pd.DataFrame, flow_data: Dict) -> bool:
         """
         检测出货
         特征：大单净流出 + 价格跌幅不大（或上涨）
@@ -107,7 +111,7 @@ class MoneyFlowStrategy:
         
         return False
     
-    def calculate_money_flow_indicators(self, df: pd.DataFrame) -> Dict:
+    def _calculate_money_flow_indicators(self, df: pd.DataFrame) -> Dict:
         """
         计算资金流指标
         """
@@ -180,7 +184,7 @@ class MoneyFlowStrategy:
             分析结果字典
         """
         result = {
-            'strategy_name': 'Money Flow Tracker',
+            'strategy_name': self.name,
             'timestamp': datetime.now().isoformat(),
             'status': 'NO_SIGNAL'
         }
@@ -190,16 +194,16 @@ class MoneyFlowStrategy:
             return result
         
         # 分析订单流
-        flow_data = self.analyze_order_flow(df)
+        flow_data = self._analyze_order_flow(df)
         result['flow_data'] = flow_data
         
         # 计算资金流指标
-        mf_indicators = self.calculate_money_flow_indicators(df)
+        mf_indicators = self._calculate_money_flow_indicators(df)
         result['indicators'] = mf_indicators
         
         # 检测吸筹/出货
-        accumulation = self.detect_accumulation(df, flow_data)
-        distribution = self.detect_distribution(df, flow_data)
+        accumulation = self._detect_accumulation(df, flow_data)
+        distribution = self._detect_distribution(df, flow_data)
         
         result['accumulation'] = accumulation
         result['distribution'] = distribution
@@ -304,65 +308,6 @@ class MoneyFlowStrategy:
         
         return result
     
-    def _calculate_atr(self, df: pd.DataFrame, period: int = 14) -> float:
-        """计算 ATR"""
-        if len(df) < period:
-            return df['close'].iloc[-1] * 0.02
-        
-        high_low = df['high'] - df['low']
-        high_close = np.abs(df['high'] - df['close'].shift())
-        low_close = np.abs(df['low'] - df['close'].shift())
-        ranges = pd.concat([high_low, high_close, low_close], axis=1)
-        true_range = np.max(ranges, axis=1)
-        atr = true_range.rolling(period).mean()
-        
-        return atr.iloc[-1] if len(atr) > 0 and not pd.isna(atr.iloc[-1]) else df['close'].iloc[-1] * 0.02
-    
-    def _find_nearest_levels(self, df: pd.DataFrame, current_price: float, direction: str) -> Dict:
-        """找出最近的支撑阻力位"""
-        swing_highs = []
-        swing_lows = []
-        
-        for i in range(20, len(df) - 5):
-            high = df['high'].iloc[i]
-            low = df['low'].iloc[i]
-            
-            left_highs = df['high'].iloc[i-20:i].max()
-            right_highs = df['high'].iloc[i+1:i+5].max()
-            left_lows = df['low'].iloc[i-20:i].min()
-            right_lows = df['low'].iloc[i+1:i+5].min()
-            
-            if high > left_highs and high > right_highs:
-                swing_highs.append(high)
-            if low < left_lows and low < right_lows:
-                swing_lows.append(low)
-        
-        swing_highs.sort(reverse=True)
-        swing_lows.sort()
-        
-        result = {'stop_level': None, 'tp_level': None}
-        
-        if direction == 'LONG':
-            for low in swing_lows:
-                if low < current_price:
-                    result['stop_level'] = low * 0.99
-                    break
-            for high in swing_highs:
-                if high > current_price:
-                    result['tp_level'] = high
-                    break
-        else:
-            for high in swing_highs:
-                if high > current_price:
-                    result['stop_level'] = high * 1.01
-                    break
-            for low in swing_lows:
-                if low < current_price:
-                    result['tp_level'] = low
-                    break
-        
-        return result
-    
     def generate_signal(self, df: pd.DataFrame, symbol: str) -> Optional[Dict]:
         """
         生成交易信号
@@ -376,10 +321,15 @@ class MoneyFlowStrategy:
         atr = self._calculate_atr(df)
         
         # 动态止损止盈
-        levels = self._find_nearest_levels(df, current_price, analysis['direction'])
+        levels = self._find_swing_levels(df)
         
-        if levels['stop_level']:
-            stop_loss_price = levels['stop_level']
+        if levels['lows'] and analysis['direction'] == 'LONG':
+            stop_level = levels['lows'][0][1] * 0.99
+            stop_loss_price = stop_level
+            stop_loss_pct = abs(current_price - stop_loss_price) / current_price * 100
+        elif levels['highs'] and analysis['direction'] == 'SHORT':
+            stop_level = levels['highs'][0][1] * 1.01
+            stop_loss_price = stop_level
             stop_loss_pct = abs(current_price - stop_loss_price) / current_price * 100
         else:
             if analysis['direction'] == 'LONG':
@@ -390,11 +340,17 @@ class MoneyFlowStrategy:
         
         # 止盈：主力吸筹/出货需要时间，给更大空间
         min_rr = 2.5
-        if levels['tp_level']:
-            take_profit_price = levels['tp_level']
+        if levels['highs'] and analysis['direction'] == 'LONG':
+            take_profit_price = levels['highs'][0][1]
             tp_pct = abs(take_profit_price - current_price) / current_price * 100
             if tp_pct / stop_loss_pct < min_rr:
-                take_profit_price = current_price * (1 + stop_loss_pct * min_rr / 100 * (1 if analysis['direction'] == 'LONG' else -1))
+                take_profit_price = current_price * (1 + stop_loss_pct * min_rr / 100)
+                tp_pct = stop_loss_pct * min_rr
+        elif levels['lows'] and analysis['direction'] == 'SHORT':
+            take_profit_price = levels['lows'][0][1]
+            tp_pct = abs(take_profit_price - current_price) / current_price * 100
+            if tp_pct / stop_loss_pct < min_rr:
+                take_profit_price = current_price * (1 - stop_loss_pct * min_rr / 100)
                 tp_pct = stop_loss_pct * min_rr
         else:
             tp_pct = stop_loss_pct * 4  # 主力行情给 4R
@@ -413,7 +369,7 @@ class MoneyFlowStrategy:
         
         return {
             'strategy_name': analysis['strategy_name'],
-            'strategy_category': 'Money Flow',
+            'strategy_category': self.category,
             'symbol': symbol.replace('USDT', '-USD'),
             'action': analysis['action'],
             'direction': analysis['direction'],
@@ -434,18 +390,10 @@ class MoneyFlowStrategy:
             'net_flow': analysis['flow_data']['net_flow'],
             'accumulation': analysis['accumulation'],
             'distribution': analysis['distribution'],
-            'stop_type': 'technical' if levels['stop_level'] else 'ATR',
-            'take_profit_type': 'technical' if levels['tp_level'] else 'multiple_R',
+            'stop_type': 'technical' if (levels['lows'] or levels['highs']) else 'ATR',
+            'take_profit_type': 'technical' if (levels['highs'] or levels['lows']) else 'multiple_R',
             'holding_period': holding_period
         }
-
-
-    def generate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        兼容老接口（返回空 DataFrame）
-        此策略使用 generate_signal 方法
-        """
-        return pd.DataFrame()
 
 
 # 便捷函数

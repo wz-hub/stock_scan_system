@@ -7,11 +7,15 @@ import numpy as np
 from typing import Dict, Optional
 from datetime import datetime
 
+from .base import BaseStrategy
 
-class VolatilitySqueezeStrategy:
+
+class VolatilitySqueezeStrategy(BaseStrategy):
     """波动率收缩突破策略"""
     
     def __init__(self):
+        super().__init__(name="Volatility Squeeze Breakout", category="Volatility")
+        
         # 布林带参数
         self.bb_period = 20
         self.bb_std = 2.0
@@ -27,7 +31,7 @@ class VolatilitySqueezeStrategy:
         # 多周期过滤（新增）
         self.require_uptrend_for_long = True  # 只做多上涨趋势
     
-    def calculate_bollinger(self, df: pd.DataFrame) -> Dict:
+    def _calculate_bollinger(self, df: pd.DataFrame) -> Dict:
         """计算布林带"""
         close = df['close']
         
@@ -52,7 +56,7 @@ class VolatilitySqueezeStrategy:
             'std': std
         }
     
-    def is_squeeze(self, df: pd.DataFrame, bb: Dict) -> bool:
+    def _is_squeeze(self, df: pd.DataFrame, bb: Dict) -> bool:
         """
         判断是否处于波动率收缩状态
         """
@@ -67,7 +71,7 @@ class VolatilitySqueezeStrategy:
         
         return current_width < percentile
     
-    def check_breakout(self, df: pd.DataFrame, bb: Dict) -> Optional[str]:
+    def _check_breakout(self, df: pd.DataFrame, bb: Dict) -> Optional[str]:
         """
         检查是否有突破信号
         返回：'LONG' / 'SHORT' / None
@@ -99,7 +103,7 @@ class VolatilitySqueezeStrategy:
         
         return None
     
-    def check_volume(self, df: pd.DataFrame) -> tuple:
+    def _check_volume(self, df: pd.DataFrame) -> tuple:
         """
         检查成交量是否确认突破
         返回：(是否确认，成交量比率)
@@ -128,7 +132,7 @@ class VolatilitySqueezeStrategy:
             分析结果字典
         """
         result = {
-            'strategy_name': 'Volatility Squeeze Breakout',
+            'strategy_name': self.name,
             'timestamp': datetime.now().isoformat(),
             'status': 'NO_SIGNAL'
         }
@@ -138,10 +142,10 @@ class VolatilitySqueezeStrategy:
             return result
         
         # 计算布林带
-        bb = self.calculate_bollinger(df)
+        bb = self._calculate_bollinger(df)
         
         # 判断是否收缩
-        squeeze = self.is_squeeze(df, bb)
+        squeeze = self._is_squeeze(df, bb)
         result['is_squeeze'] = squeeze
         
         if not squeeze:
@@ -151,7 +155,7 @@ class VolatilitySqueezeStrategy:
             return result
         
         # 检查突破
-        breakout = self.check_breakout(df, bb)
+        breakout = self._check_breakout(df, bb)
         result['breakout_direction'] = breakout
         
         if breakout is None:
@@ -159,7 +163,7 @@ class VolatilitySqueezeStrategy:
             return result
         
         # 多周期过滤（新增）- 只做多上涨趋势
-        trend = self.check_trend(df)
+        trend = self._check_trend(df)
         result['trend'] = trend
         
         if self.require_uptrend_for_long and breakout == 'LONG' and trend != 'BULL':
@@ -167,7 +171,7 @@ class VolatilitySqueezeStrategy:
             return result
         
         # 检查成交量确认
-        volume_confirmed, volume_ratio = self.check_volume(df)
+        volume_confirmed, volume_ratio = self._check_volume(df)
         result['volume_confirmed'] = volume_confirmed
         result['volume_ratio'] = volume_ratio
         
@@ -243,39 +247,6 @@ class VolatilitySqueezeStrategy:
         
         return (historical_widths < current_width).sum() / len(historical_widths)
     
-    def _calculate_atr(self, df: pd.DataFrame, period: int = 14) -> float:
-        """计算 ATR"""
-        if len(df) < period:
-            return df['close'].iloc[-1] * 0.02
-        
-        high_low = df['high'] - df['low']
-        high_close = np.abs(df['high'] - df['close'].shift())
-        low_close = np.abs(df['low'] - df['close'].shift())
-        ranges = pd.concat([high_low, high_close, low_close], axis=1)
-        true_range = np.max(ranges, axis=1)
-        atr = true_range.rolling(period).mean()
-        
-        return atr.iloc[-1] if len(atr) > 0 and not pd.isna(atr.iloc[-1]) else df['close'].iloc[-1] * 0.02
-    
-    def check_trend(self, df: pd.DataFrame) -> str:
-        """
-        检查趋势方向（新增）
-        返回：'BULL' / 'BEAR' / 'NEUTRAL'
-        """
-        if len(df) < 50:
-            return 'NEUTRAL'
-        
-        close = df['close'].iloc[-1]
-        ma20 = df['close'].rolling(20).mean().iloc[-1]
-        ma50 = df['close'].rolling(50).mean().iloc[-1]
-        
-        if close > ma20 > ma50:
-            return 'BULL'
-        elif close < ma20 < ma50:
-            return 'BEAR'
-        else:
-            return 'NEUTRAL'
-    
     def generate_signal(self, df: pd.DataFrame, symbol: str) -> Optional[Dict]:
         """
         生成交易信号
@@ -294,7 +265,7 @@ class VolatilitySqueezeStrategy:
         
         return {
             'strategy_name': analysis['strategy_name'],
-            'strategy_category': 'Volatility',
+            'strategy_category': self.category,
             'symbol': symbol.replace('USDT', '-USD'),
             'action': analysis['action'],
             'direction': analysis['direction'],
@@ -315,14 +286,6 @@ class VolatilitySqueezeStrategy:
             'volume_ratio': analysis.get('volume_ratio', 1.0),
             'volume_confirmed': analysis.get('volume_confirmed', False)
         }
-
-
-    def generate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        兼容老接口（返回空 DataFrame）
-        此策略使用 generate_signal 方法
-        """
-        return pd.DataFrame()
 
 
 # 便捷函数
