@@ -6,9 +6,13 @@
 import sys
 import time
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# 北京时间 (UTC+8)
+def beijing_time():
+    return datetime.utcnow() + timedelta(hours=8)
 
 from core.scanner import SignalScanner
 from config.settings import Settings
@@ -18,7 +22,7 @@ def main():
     print("=" * 80)
     print("📊 信号扫描 - 新系统")
     print("=" * 80)
-    print(f"扫描时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"扫描时间：{beijing_time().strftime('%Y-%m-%d %H:%M:%S')} (北京时间)")
     print("=" * 80)
     
     start_time = time.time()
