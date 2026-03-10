@@ -29,6 +29,7 @@ from strategies.money_flow import MoneyFlowStrategy
 from strategies.liquidity_hunt import LiquidityHuntStrategy
 from strategies.trend_follow import TrendFollowStrategy
 from strategies.rsi_reversal import RSIMeanReversionStrategy
+from strategies.donchian_breakout import DonchianBreakoutStrategy
 
 
 class BacktestEngine:
@@ -50,6 +51,7 @@ class BacktestEngine:
             'multi_timeframe': MultiTimeframeStrategy(),
             'trend_follow': TrendFollowStrategy(),
             'rsi_reversal': RSIMeanReversionStrategy(),
+            'donchian_breakout': DonchianBreakoutStrategy(),
             'volatility_squeeze': VolatilitySqueezeStrategy(),
             'money_flow': MoneyFlowStrategy(),
             'liquidity_hunt': LiquidityHuntStrategy()
@@ -404,7 +406,7 @@ def main():
     
     parser = argparse.ArgumentParser(description='策略回测框架')
     parser.add_argument('--strategy', type=str, default='multi_timeframe',
-                       choices=['multi_timeframe', 'trend_follow', 'rsi_reversal', 'volatility_squeeze', 'money_flow', 'liquidity_hunt'],
+                       choices=['multi_timeframe', 'trend_follow', 'rsi_reversal', 'donchian_breakout', 'volatility_squeeze', 'money_flow', 'liquidity_hunt'],
                        help='策略名称')
     parser.add_argument('--symbols', type=str, default='BTCUSDT,ETHUSDT,BCHUSDT,XRPUSDT,DOGEUSDT',
                        help='交易对列表，逗号分隔')
