@@ -28,7 +28,7 @@ def main():
     
     # 获取配置
     min_confidence = settings.get('scanner.min_confidence', 80)
-    feishu_webhook = settings.get('notification.feishu.webhook', '')
+    feishu_webhook = settings.get('notification.feishu.webhook_url', '')
     feishu_enabled = settings.get('notification.feishu.enabled', True)
     
     # 初始化扫描器（向后兼容，使用原有组件）
