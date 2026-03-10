@@ -21,6 +21,7 @@ from realtime_data import RealtimeData
 from money_flow import MoneyFlowMonitor
 from feishu_notifier import FeishuNotifier, SignalMessage
 from database import MarketDatabase
+from strategies.donchian_breakout import DonchianBreakoutStrategy
 
 # 缓存文件
 CACHE_FILE = Path('cache/last_signals.json')
