@@ -154,6 +154,10 @@ class MultiTimeframeStrategy(BaseStrategy):
         ma50 = self._calculate_ma(df, self.slow_ma)
         ma200 = self._calculate_ma(df, self.trend_ma)
         
+        # 安全检查：任何 MA 为 None 则返回 NEUTRAL
+        if ma20 is None or ma50 is None or ma200 is None:
+            return 'NEUTRAL'
+        
         # 多头排列
         if close > ma20 > ma50 > ma200:
             return 'BULL'
@@ -176,6 +180,10 @@ class MultiTimeframeStrategy(BaseStrategy):
         close = df['close'].iloc[-1]
         ma20 = self._calculate_ma(df, self.fast_ma)
         ma50 = self._calculate_ma(df, self.slow_ma)
+        
+        # 安全检查：任何 MA 为 None 则返回 WAIT
+        if ma20 is None or ma50 is None:
+            return 'WAIT'
         
         # 金叉：快线上穿慢线
         if ma20 > ma50:
@@ -210,7 +218,14 @@ class MultiTimeframeStrategy(BaseStrategy):
         
         # 用 RSI 找超买超卖
         rsi = self._calculate_rsi(df, 14)
+        if rsi is None or len(rsi) == 0:
+            return 'WAIT'
+        
         current_rsi = rsi.iloc[-1]
+        
+        # 安全检查：RSI 为 None 或 NaN 则返回 WAIT
+        if current_rsi is None or (isinstance(current_rsi, float) and np.isnan(current_rsi)):
+            return 'WAIT'
         
         # 入场条件：RSI 不过度超买/超卖 + 波动率正常
         if 30 < current_rsi < 70:
@@ -219,13 +234,13 @@ class MultiTimeframeStrategy(BaseStrategy):
         # RSI 超卖但趋势向上 → 可能是好机会
         if current_rsi < 30:
             ma20 = self._calculate_ma(df, self.fast_ma)
-            if df['close'].iloc[-1] > ma20:
+            if ma20 is not None and df['close'].iloc[-1] > ma20:
                 return 'GO'
         
         # RSI 超买但趋势向下 → 可能是好机会
         if current_rsi > 70:
             ma20 = self._calculate_ma(df, self.fast_ma)
-            if df['close'].iloc[-1] < ma20:
+            if ma20 is not None and df['close'].iloc[-1] < ma20:
                 return 'GO'
         
         return 'WAIT'
