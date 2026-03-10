@@ -97,6 +97,57 @@ class BaseStrategy(ABC):
         ranges = pd.concat([high_low, high_close, low_close], axis=1)
         true_range = np.max(ranges, axis=1)
         atr = true_range.rolling(period).mean()
+        return atr.iloc[-1]
+    
+    def _calculate_adx(self, df: pd.DataFrame, period: int = 14) -> float:
+        """
+        计算 ADX (Average Directional Index) - 趋势强度指标
+        
+        Args:
+            df: K 线数据
+            period: ADX 周期
+        
+        Returns:
+            ADX 值 (0-100)
+            ADX > 25: 强趋势
+            ADX < 20: 震荡
+        """
+        if len(df) < period * 2:
+            return 0.0
+        
+        # 计算 +DM 和 -DM
+        high = df['high']
+        low = df['low']
+        close = df['close']
+        
+        plus_dm = high.diff()
+        minus_dm = -low.diff()
+        
+        plus_dm[plus_dm < 0] = 0
+        minus_dm[minus_dm < 0] = 0
+        
+        # 当 +DM > -DM 时，-DM = 0；反之亦然
+        plus_dm[(plus_dm <= minus_dm) & (minus_dm > 0)] = 0
+        minus_dm[(minus_dm <= plus_dm) & (plus_dm > 0)] = 0
+        
+        # 计算 ATR
+        tr1 = high - low
+        tr2 = abs(high - close.shift())
+        tr3 = abs(low - close.shift())
+        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        atr = tr.rolling(period).mean()
+        
+        # 计算 +DI 和 -DI
+        plus_di = 100 * (plus_dm.rolling(period).mean() / atr)
+        minus_di = 100 * (minus_dm.rolling(period).mean() / atr)
+        
+        # 计算 DX
+        dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)
+        
+        # 计算 ADX
+        adx = dx.rolling(period).mean()
+        
+        return adx.iloc[-1] if not np.isnan(adx.iloc[-1]) else 0.0
         
         return atr.iloc[-1] if len(atr) > 0 and not pd.isna(atr.iloc[-1]) else df['close'].iloc[-1] * 0.02
     

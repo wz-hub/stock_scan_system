@@ -149,7 +149,7 @@ class MultiTimeframeStrategy(BaseStrategy):
     
     def _get_trend(self, df: pd.DataFrame) -> str:
         """
-        判断趋势方向
+        判断趋势方向（优化版：MA + 动量 + ADX 三重确认）
         返回：'BULL' / 'BEAR' / 'NEUTRAL'
         """
         if len(df) < self.trend_ma:
@@ -164,16 +164,42 @@ class MultiTimeframeStrategy(BaseStrategy):
         if ma20 is None or ma50 is None or ma200 is None:
             return 'NEUTRAL'
         
-        # 多头排列
-        if close > ma20 > ma50 > ma200:
+        # 检查近期价格动量（最近 5 天）
+        recent_close = df['close'].iloc[-1]
+        past_close = df['close'].iloc[-5] if len(df) >= 5 else df['close'].iloc[0]
+        momentum = (recent_close - past_close) / past_close * 100
+        
+        # 计算 ADX 趋势强度
+        adx = self._calculate_adx(df, 14)
+        
+        # 多头排列 + 上涨动量 + 趋势强度
+        if close > ma20 > ma50 > ma200 and momentum > 0 and adx > 20:
             return 'BULL'
         
-        # 空头排列
-        if close < ma20 < ma50 < ma200:
+        # 空头排列 + 下跌动量 + 趋势强度
+        if close < ma20 < ma50 < ma200 and momentum < 0 and adx > 20:
             return 'BEAR'
         
-        # 均线纠缠，震荡
+        # 均线纠缠或动量不足或趋势弱，震荡
         return 'NEUTRAL'
+    
+    def _check_trend_filter(self, trend: str, direction: str) -> bool:
+        """
+        趋势过滤器（优化：避免逆势交易）
+        
+        Returns:
+            True = 允许交易，False = 禁止交易
+        """
+        # 上涨趋势：只做多，不做空
+        if trend == 'BULL' and direction == 'SHORT':
+            return False
+        
+        # 下跌趋势：只做空，不做多
+        if trend == 'BEAR' and direction == 'LONG':
+            return False
+        
+        # 震荡：允许交易
+        return True
     
     def _get_signal(self, df: pd.DataFrame) -> str:
         """
@@ -325,8 +351,15 @@ class MultiTimeframeStrategy(BaseStrategy):
         if analysis['final_action'] == 'WAIT':
             return None
         
-        # 优化：置信度过滤（80% → 85%）
+        # 优化 1：置信度过滤（80% → 85%）
         if analysis.get('confidence', 0) < self.min_confidence:
+            return None
+        
+        # 优化 2：趋势过滤（避免逆势交易）
+        trend = analysis['timeframes'].get(self.trend_timeframe, {}).get('trend', 'NEUTRAL')
+        direction = analysis['final_direction']
+        if not self._check_trend_filter(trend, direction):
+            print(f"⚠️  趋势过滤：{trend} 趋势禁止 {direction}")
             return None
         
         # 获取当前价格
