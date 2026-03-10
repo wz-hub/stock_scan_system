@@ -16,6 +16,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from datetime import datetime, timedelta
+import pandas as pd
 from typing import Dict, List, Optional, Tuple
 import json
 from collections import defaultdict
@@ -26,6 +27,8 @@ from strategies.multi_timeframe import MultiTimeframeStrategy
 from strategies.volatility_squeeze import VolatilitySqueezeStrategy
 from strategies.money_flow import MoneyFlowStrategy
 from strategies.liquidity_hunt import LiquidityHuntStrategy
+from strategies.trend_follow import TrendFollowStrategy
+from strategies.rsi_reversal import RSIMeanReversionStrategy
 
 
 class BacktestEngine:
@@ -45,6 +48,8 @@ class BacktestEngine:
         # 策略库
         self.strategies = {
             'multi_timeframe': MultiTimeframeStrategy(),
+            'trend_follow': TrendFollowStrategy(),
+            'rsi_reversal': RSIMeanReversionStrategy(),
             'volatility_squeeze': VolatilitySqueezeStrategy(),
             'money_flow': MoneyFlowStrategy(),
             'liquidity_hunt': LiquidityHuntStrategy()
@@ -90,7 +95,14 @@ class BacktestEngine:
                 df = pd.read_sql_query(query, conn, params=(symbol, interval, start_ts, end_ts))
                 
                 if len(df) > 0:
-                    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+                    # 检查时间戳是秒还是毫秒
+                    if df['timestamp'].iloc[0] > 1e12:
+                        # 毫秒
+                        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+                    else:
+                        # 秒
+                        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
+                    
                     df.set_index('timestamp', inplace=True)
                     data[symbol][interval] = df
         
@@ -100,7 +112,7 @@ class BacktestEngine:
     def run_backtest(self, data: Dict, strategy_name: str, 
                      symbols: List[str], start_date: str, end_date: str) -> Dict:
         """
-        运行回测
+        运行回测 - 使用历史数据逐日回测
         
         Args:
             data: 历史数据
@@ -129,13 +141,20 @@ class BacktestEngine:
         
         self.trades = []
         capital = self.initial_capital
-        equity_curve = []
         
         # 按日期回测
         dates = pd.date_range(start=start_date, end=end_date, freq='D')
+        total_days = len(dates)
+        signals_generated = 0
         
-        for date in dates:
+        print(f"开始回测 {total_days} 天...")
+        print()
+        
+        for i, date in enumerate(dates, 1):
             date_str = date.strftime('%Y-%m-%d')
+            
+            if i % 100 == 0:
+                print(f"进度：{i}/{total_days} 天 ({i/total_days*100:.1f}%) - {len(self.trades)} 个信号")
             
             for symbol in symbols:
                 if symbol not in data:
@@ -143,15 +162,18 @@ class BacktestEngine:
                 
                 symbol_data = data[symbol]
                 
-                # 准备多周期数据
+                # 准备多周期数据（统一为大写，匹配策略配置）
                 data_dict = {}
-                for interval in ['1d', '4h', '1h']:
-                    if interval in symbol_data:
-                        df = symbol_data[interval]
-                        # 获取截止到当前日期的数据
-                        mask = df.index <= date
-                        if mask.sum() > 0:
-                            data_dict[interval] = df[mask]
+                interval_map = {'1d': '1D', '4h': '4H', '1h': '1H'}
+                
+                for db_interval, strategy_interval in interval_map.items():
+                    if db_interval in symbol_data:
+                        df = symbol_data[db_interval]
+                        # 使用截止到昨天的数据（避免使用当天数据）
+                        yesterday = date - timedelta(days=1)
+                        mask = df.index <= yesterday
+                        if mask.sum() > 100:  # 至少需要 100 根 K 线
+                            data_dict[strategy_interval] = df[mask]
                 
                 # 数据不足则跳过
                 if len(data_dict) < 3:
@@ -161,9 +183,16 @@ class BacktestEngine:
                 signal = strategy.generate_signal(data_dict, symbol)
                 
                 if signal:
+                    signals_generated += 1
+                    
+                    # 检查置信度过滤
+                    if signal.get('confidence', 0) < strategy.min_confidence:
+                        continue
+                    
                     # 执行交易
                     entry_price = float(signal['entry_price'])
-                    position_size = capital * float(signal.get('position_size_pct', 10)) / 100
+                    position_size_pct = float(signal.get('position_size_pct', 10))
+                    position_size = capital * position_size_pct / 100
                     quantity = position_size / entry_price
                     
                     # 计算手续费
@@ -180,10 +209,17 @@ class BacktestEngine:
                         'commission': commission,
                         'stop_loss': float(signal['stop_loss_price']),
                         'take_profit': float(signal['take_profit_price']),
+                        'stop_loss_pct': float(signal.get('stop_loss_pct', 0)),
+                        'take_profit_pct': float(signal.get('take_profit_pct', 0)),
+                        'confidence': signal.get('confidence', 0),
                         'status': 'OPEN'
                     }
                     
                     self.trades.append(trade)
+        
+        print()
+        print(f"回测完成！共 {signals_generated} 个信号")
+        print()
         
         # 计算平仓和最终结果
         results = self._calculate_results(symbols, data, end_date)
@@ -191,39 +227,91 @@ class BacktestEngine:
         return results
     
     def _calculate_results(self, symbols: List[str], data: Dict, end_date: str) -> Dict:
-        """计算回测结果"""
+        """计算回测结果 - 模拟止损止盈"""
         if not self.trades:
             print("❌ 没有交易记录")
             return {}
         
-        # 模拟平仓（简化：用最后一天价格平仓）
         closed_trades = []
         open_trades = []
         
         for trade in self.trades:
             symbol = trade['symbol']
+            entry_price = trade['entry_price']
+            stop_loss = trade['stop_loss']
+            take_profit = trade['take_profit']
+            direction = trade['direction']
             
-            # 获取退出价格
+            # 获取该交易后的价格数据
             if symbol in data and '1d' in data[symbol]:
                 df = data[symbol]['1d']
-                mask = df.index <= end_date
+                trade_date = datetime.strptime(trade['date'], '%Y-%m-%d')
+                mask = df.index >= pd.Timestamp(trade_date)
+                
                 if mask.sum() > 0:
-                    exit_price = df[mask]['close'].iloc[-1]
+                    post_trade_data = df[mask]
                     
-                    # 计算盈亏
-                    if trade['direction'] == 'LONG':
-                        pnl = (exit_price - trade['entry_price']) * trade['quantity']
-                    else:
-                        pnl = (trade['entry_price'] - exit_price) * trade['quantity']
+                    # 模拟止损止盈
+                    exited = False
+                    for idx, row in post_trade_data.iterrows():
+                        low = row['low']
+                        high = row['high']
+                        close = row['close']
+                        
+                        # 检查止损
+                        if direction == 'LONG' and low <= stop_loss:
+                            exit_price = stop_loss
+                            exited = True
+                        elif direction == 'SHORT' and high >= stop_loss:
+                            exit_price = stop_loss
+                            exited = True
+                        # 检查止盈
+                        elif direction == 'LONG' and high >= take_profit:
+                            exit_price = take_profit
+                            exited = True
+                        elif direction == 'SHORT' and low <= take_profit:
+                            exit_price = take_profit
+                            exited = True
+                        
+                        if exited:
+                            # 计算盈亏
+                            if direction == 'LONG':
+                                pnl = (exit_price - entry_price) * trade['quantity']
+                            else:
+                                pnl = (entry_price - exit_price) * trade['quantity']
+                            
+                            pnl_pct = pnl / trade['position_size'] * 100
+                            
+                            trade['exit_price'] = exit_price
+                            trade['pnl'] = pnl
+                            trade['pnl_pct'] = pnl_pct
+                            trade['exit_date'] = idx.strftime('%Y-%m-%d')
+                            trade['exit_reason'] = 'TAKE_PROFIT' if pnl > 0 else 'STOP_LOSS'
+                            trade['status'] = 'CLOSED'
+                            
+                            closed_trades.append(trade)
+                            break
                     
-                    pnl_pct = pnl / trade['position_size'] * 100
-                    
-                    trade['exit_price'] = exit_price
-                    trade['pnl'] = pnl
-                    trade['pnl_pct'] = pnl_pct
-                    trade['status'] = 'CLOSED'
-                    
-                    closed_trades.append(trade)
+                    # 如果没有触发止损止盈，用最后价格计算浮盈浮亏
+                    if not exited:
+                        last_price = post_trade_data['close'].iloc[-1]
+                        last_date = post_trade_data.index[-1]
+                        
+                        if direction == 'LONG':
+                            pnl = (last_price - entry_price) * trade['quantity']
+                        else:
+                            pnl = (entry_price - last_price) * trade['quantity']
+                        
+                        pnl_pct = pnl / trade['position_size'] * 100
+                        
+                        trade['exit_price'] = last_price
+                        trade['pnl'] = pnl
+                        trade['pnl_pct'] = pnl_pct
+                        trade['exit_date'] = last_date.strftime('%Y-%m-%d')
+                        trade['exit_reason'] = 'OPEN'
+                        trade['status'] = 'OPEN'
+                        
+                        open_trades.append(trade)
                 else:
                     open_trades.append(trade)
             else:
@@ -316,7 +404,7 @@ def main():
     
     parser = argparse.ArgumentParser(description='策略回测框架')
     parser.add_argument('--strategy', type=str, default='multi_timeframe',
-                       choices=['multi_timeframe', 'volatility_squeeze', 'money_flow', 'liquidity_hunt'],
+                       choices=['multi_timeframe', 'trend_follow', 'rsi_reversal', 'volatility_squeeze', 'money_flow', 'liquidity_hunt'],
                        help='策略名称')
     parser.add_argument('--symbols', type=str, default='BTCUSDT,ETHUSDT,BCHUSDT,XRPUSDT,DOGEUSDT',
                        help='交易对列表，逗号分隔')

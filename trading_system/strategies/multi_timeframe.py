@@ -30,10 +30,12 @@ class MultiTimeframeStrategy(BaseStrategy):
         self.require_all_align = True    # 是否要求所有周期同向
         
         # === 优化参数 (2026-03-10) ===
-        self.min_confidence = 85         # 置信度门槛：80% → 85%
-        self.atr_multiplier_sl = 1.5     # 止损倍数：2 → 1.5
-        self.min_rr = 2.0                # 最小盈亏比：3 → 2
-        self.max_holding_days = 5        # 最大持仓天数：新增
+        # 第一次优化 (18:30): 85% 太严格 → 改为 70%
+        self.min_confidence = 70         # 置信度门槛：85% → 70% ✅
+        self.atr_multiplier_sl = 2.0     # 止损倍数：1.5 → 2.0 (放宽止损)
+        self.min_rr = 3.0                # 最小盈亏比：2 → 3 (提高止盈)
+        self.max_holding_days = 5        # 最大持仓天数
+        self.adx_threshold = 15          # ADX 阈值：20 → 15 (放宽趋势确认)
     
     def analyze(self, data_dict: Dict[str, pd.DataFrame]) -> Dict:
         """
@@ -169,15 +171,15 @@ class MultiTimeframeStrategy(BaseStrategy):
         past_close = df['close'].iloc[-5] if len(df) >= 5 else df['close'].iloc[0]
         momentum = (recent_close - past_close) / past_close * 100
         
-        # 计算 ADX 趋势强度
+        # 计算 ADX 趋势强度（放宽阈值）
         adx = self._calculate_adx(df, 14)
         
-        # 多头排列 + 上涨动量 + 趋势强度
-        if close > ma20 > ma50 > ma200 and momentum > 0 and adx > 20:
+        # 多头排列 + 上涨动量 + 趋势强度（放宽 ADX 要求）
+        if close > ma20 > ma50 > ma200 and momentum > 0 and adx > self.adx_threshold:
             return 'BULL'
         
-        # 空头排列 + 下跌动量 + 趋势强度
-        if close < ma20 < ma50 < ma200 and momentum < 0 and adx > 20:
+        # 空头排列 + 下跌动量 + 趋势强度（放宽 ADX 要求）
+        if close < ma20 < ma50 < ma200 and momentum < 0 and adx > self.adx_threshold:
             return 'BEAR'
         
         # 均线纠缠或动量不足或趋势弱，震荡
@@ -185,18 +187,18 @@ class MultiTimeframeStrategy(BaseStrategy):
     
     def _check_trend_filter(self, trend: str, direction: str) -> bool:
         """
-        趋势过滤器（优化：避免逆势交易）
+        趋势过滤器（优化：避免逆势交易，但放宽条件）
         
         Returns:
             True = 允许交易，False = 禁止交易
         """
-        # 上涨趋势：只做多，不做空
+        # 上涨趋势：优先做多，但允许做空（小仓位）
         if trend == 'BULL' and direction == 'SHORT':
-            return False
+            return True  # 放宽：允许逆势，但置信度会降低
         
-        # 下跌趋势：只做空，不做多
+        # 下跌趋势：优先做空，但允许做多（小仓位）
         if trend == 'BEAR' and direction == 'LONG':
-            return False
+            return True  # 放宽：允许逆势
         
         # 震荡：允许交易
         return True
