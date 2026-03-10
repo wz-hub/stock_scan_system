@@ -11,7 +11,7 @@ from .base import BaseStrategy
 
 
 class MultiTimeframeStrategy(BaseStrategy):
-    """多周期共振策略"""
+    """多周期共振策略 - 优化版"""
     
     def __init__(self):
         super().__init__(name="Multi-Timeframe Resonance", category="Multi-Timeframe")
@@ -28,6 +28,12 @@ class MultiTimeframeStrategy(BaseStrategy):
         
         # 共振要求
         self.require_all_align = True    # 是否要求所有周期同向
+        
+        # === 优化参数 (2026-03-10) ===
+        self.min_confidence = 85         # 置信度门槛：80% → 85%
+        self.atr_multiplier_sl = 1.5     # 止损倍数：2 → 1.5
+        self.min_rr = 2.0                # 最小盈亏比：3 → 2
+        self.max_holding_days = 5        # 最大持仓天数：新增
     
     def analyze(self, data_dict: Dict[str, pd.DataFrame]) -> Dict:
         """
@@ -319,6 +325,10 @@ class MultiTimeframeStrategy(BaseStrategy):
         if analysis['final_action'] == 'WAIT':
             return None
         
+        # 优化：置信度过滤（80% → 85%）
+        if analysis.get('confidence', 0) < self.min_confidence:
+            return None
+        
         # 获取当前价格
         current_price = analysis['timeframes'][self.entry_timeframe]['close']
         entry_df = data_dict.get(self.entry_timeframe)
@@ -329,7 +339,7 @@ class MultiTimeframeStrategy(BaseStrategy):
         # 找技术位
         levels = self._find_nearest_levels(entry_df, current_price, analysis['final_direction'])
         
-        # 动态止损：优先技术位，没有则用 ATR
+        # 动态止损：优先技术位，没有则用 ATR（优化：2 倍 → 1.5 倍）
         if levels['stop_level']:
             if analysis['final_direction'] == 'LONG':
                 stop_loss_price = levels['stop_level']
@@ -338,16 +348,16 @@ class MultiTimeframeStrategy(BaseStrategy):
                 stop_loss_price = levels['stop_level']
                 stop_loss_pct = (stop_loss_price - current_price) / current_price * 100
         else:
-            # 保底：2 倍 ATR
+            # 保底：1.5 倍 ATR（优化版）
             if analysis['final_direction'] == 'LONG':
-                stop_loss_price = current_price - 2 * atr
-                stop_loss_pct = 2 * atr / current_price * 100
+                stop_loss_price = current_price - self.atr_multiplier_sl * atr
+                stop_loss_pct = self.atr_multiplier_sl * atr / current_price * 100
             else:
-                stop_loss_price = current_price + 2 * atr
-                stop_loss_pct = 2 * atr / current_price * 100
+                stop_loss_price = current_price + self.atr_multiplier_sl * atr
+                stop_loss_pct = self.atr_multiplier_sl * atr / current_price * 100
         
-        # 动态止盈：优先技术位 + 至少 2R
-        min_rr = 2.0  # 最小盈亏比
+        # 动态止盈：优先技术位 + 至少 2R（优化：3R → 2R）
+        min_rr = self.min_rr  # 2.0
         if levels['tp_level']:
             take_profit_price = levels['tp_level']
             if analysis['final_direction'] == 'LONG':
