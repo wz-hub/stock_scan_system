@@ -14,13 +14,20 @@ sys.path.insert(0, str(Path(__file__).parent))
 from signal_tracker import SignalTracker
 from feishu_notifier import FeishuNotifier
 
-# 加载配置
-config_file = Path('config/notification.json')
-with open(config_file) as f:
-    config = json.load(f)
-
-feishu_config = config.get('feishu', {})
-webhook_url = feishu_config.get('webhook_url', '')
+# 加载配置（优先使用新配置，向后兼容旧配置）
+webhook_url = ''
+try:
+    from config.settings import Settings
+    settings = Settings()
+    webhook_url = settings.get('notification.feishu.webhook', '')
+except:
+    # 向后兼容旧配置
+    config_file = Path('config/notification.json')
+    if config_file.exists():
+        with open(config_file) as f:
+            config = json.load(f)
+        feishu_config = config.get('feishu', {})
+        webhook_url = feishu_config.get('webhook_url', '')
 
 print("="*80)
 print("📊 信号统计报表")
