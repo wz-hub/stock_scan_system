@@ -27,25 +27,41 @@ CACHE_FILE = Path('cache/last_signals.json')
 CACHE_FILE.parent.mkdir(exist_ok=True)
 CACHE_EXPIRY_HOURS = 24
 
-# 加载配置
-scan_config_file = Path('config/scan_config.json')
-with open(scan_config_file) as f:
-    scan_config = json.load(f)
-
-notification_config_file = Path('config/notification.json')
-with open(notification_config_file) as f:
-    notification_config = json.load(f)
-
-scan_symbols_config = scan_config.get('scan_symbols', {})
-feishu_config = notification_config.get('feishu', {})
-filters_config = notification_config.get('filters', {})
-
-volume_top_n = scan_symbols_config.get('volume_top_n', 100)
-inflow_top = scan_symbols_config.get('money_flow_inflow_top', 20)
-outflow_top = scan_symbols_config.get('money_flow_outflow_top', 20)
-base_symbols = scan_symbols_config.get('base_symbols', ['BTCUSDT', 'ETHUSDT'])
-min_confidence = filters_config.get('min_confidence', 60)
-feishu_webhook = feishu_config.get('webhook_url', '')
+# 加载配置（优先使用新配置系统，向后兼容旧配置）
+try:
+    from config.settings import Settings
+    settings = Settings()
+    
+    # 新配置系统
+    volume_top_n = settings.get('scanner.symbols.volume_top_n', 100)
+    inflow_top = settings.get('scanner.symbols.money_flow_inflow_top', 20)
+    outflow_top = settings.get('scanner.symbols.money_flow_outflow_top', 20)
+    base_symbols = settings.get('scanner.symbols.base_symbols', ['BTCUSDT', 'ETHUSDT'])
+    min_confidence = settings.get('scanner.min_confidence', 60)
+    feishu_webhook = settings.get('notification.feishu.webhook', '')
+    feishu_enabled = settings.get('notification.feishu.enabled', True)
+except Exception as e:
+    # 向后兼容旧配置
+    print(f"⚠️  使用旧配置系统：{e}")
+    scan_config_file = Path('config/scan_config.json')
+    with open(scan_config_file) as f:
+        scan_config = json.load(f)
+    
+    notification_config_file = Path('config/notification.json')
+    with open(notification_config_file) as f:
+        notification_config = json.load(f)
+    
+    scan_symbols_config = scan_config.get('scan_symbols', {})
+    feishu_config = notification_config.get('feishu', {})
+    filters_config = notification_config.get('filters', {})
+    
+    volume_top_n = scan_symbols_config.get('volume_top_n', 100)
+    inflow_top = scan_symbols_config.get('money_flow_inflow_top', 20)
+    outflow_top = scan_symbols_config.get('money_flow_outflow_top', 20)
+    base_symbols = scan_symbols_config.get('base_symbols', ['BTCUSDT', 'ETHUSDT'])
+    min_confidence = filters_config.get('min_confidence', 60)
+    feishu_webhook = feishu_config.get('webhook_url', '')
+    feishu_enabled = True
 
 print("📊 全市场信号扫描 - 全部 13 策略版")
 print("="*80)
