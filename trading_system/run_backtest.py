@@ -408,7 +408,7 @@ def main():
     
     parser = argparse.ArgumentParser(description='策略回测框架')
     parser.add_argument('--strategy', type=str, default='multi_timeframe',
-                       choices=['multi_timeframe', 'trend_follow', 'rsi_reversal', 'donchian_breakout', 'volatility_squeeze', 'money_flow', 'liquidity_hunt'],
+                       choices=['multi_timeframe', 'trend_follow', 'rsi_reversal', 'donchian_breakout', 'volatility_squeeze', 'money_flow', 'liquidity_hunt', 'flag_pattern'],
                        help='策略名称')
     parser.add_argument('--symbols', type=str, default='BTCUSDT,ETHUSDT,BCHUSDT,XRPUSDT,DOGEUSDT',
                        help='交易对列表，逗号分隔')
