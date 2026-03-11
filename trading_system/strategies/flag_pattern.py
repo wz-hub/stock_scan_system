@@ -30,7 +30,7 @@ class FlagPatternStrategy(BaseStrategy):
         self.pole_min_change = 4.0   # 旗杆最小涨幅/跌幅 (%)
         
         # 旗面参数
-        self.flag_min_bars = 5       # 旗面最少 K 线数
+        self.flag_min_bars = 4       # 旗面最少 K 线数
         self.flag_max_bars = 20      # 旗面最多 K 线数
         self.flag_max_retrace = 61.8 # 旗面最大回撤 (%) - 斐波那契 0.618
         self.flag_max_advance = 50.0 # 旗面最大反弹 (%)
@@ -53,11 +53,14 @@ class FlagPatternStrategy(BaseStrategy):
             {'start_idx': int, 'end_idx': int, 'change_pct': float, 'direction': str}
             或 None
         """
-        if len(df) < self.pole_min_bars + self.flag_min_bars:
+        # 需要预留空间：旗面最小长度 + 至少 1 根突破 K 线
+        min_space_after_pole = self.flag_min_bars + 1
+        
+        if len(df) < self.pole_min_bars + min_space_after_pole:
             return None
         
-        # 从后往前找最近的强劲走势
-        for pole_end in range(len(df) - self.flag_min_bars - 1, self.pole_min_bars - 1, -1):
+        # 从后往前找最近的强劲走势，确保后面有足够空间
+        for pole_end in range(len(df) - min_space_after_pole - 1, self.pole_min_bars - 1, -1):
             for pole_start in range(pole_end - self.pole_max_bars, pole_end - self.pole_min_bars + 1):
                 if pole_start < 0:
                     continue
@@ -110,12 +113,12 @@ class FlagPatternStrategy(BaseStrategy):
         pole_end = pole['end_idx']
         flag_start = pole_end + 1
         
-        if flag_start >= len(df) - self.flag_min_bars + 1:
+        if flag_start >= len(df) - self.flag_min_bars + 2:  # 至少留一根 K 线用于突破检测
             return None
         
         # 从旗杆结束后开始找整理区间
         for flag_end in range(flag_start + self.flag_min_bars - 1, 
-                             min(flag_start + self.flag_max_bars, len(df))):
+                             min(flag_start + self.flag_max_bars, len(df) - 1)):  # 不包含最后一根 K 线
             flag_df = df.iloc[flag_start:flag_end + 1]
             
             flag_high = flag_df['high'].max()
@@ -180,39 +183,36 @@ class FlagPatternStrategy(BaseStrategy):
         Returns:
             突破信息或 None
         """
-        if len(df) <= flag['end_idx']:
-            return None
+        flag_end = flag['end_idx']
         
-        # 获取突破 K 线（旗面结束后的 K 线）
-        breakout_idx = flag['end_idx'] + 1
-        if breakout_idx >= len(df):
-            return None
-        
-        breakout_k = df.iloc[breakout_idx]
-        current_k = df.iloc[-1]
-        
-        if pole['direction'] == 'BULL':
-            # 牛市旗：突破旗面高点
-            breakout_level = flag['high']
-            if current_k['high'] > breakout_level:
-                breakout_strength = (current_k['high'] - breakout_level) / breakout_level * 100
-                return {
-                    'type': 'BULLISH',
-                    'level': breakout_level,
-                    'strength': breakout_strength,
-                    'confirmed': True
-                }
-        else:
-            # 熊市旗：突破旗面低点
-            breakout_level = flag['low']
-            if current_k['low'] < breakout_level:
-                breakout_strength = (breakout_level - current_k['low']) / breakout_level * 100
-                return {
-                    'type': 'BEARISH',
-                    'level': breakout_level,
-                    'strength': breakout_strength,
-                    'confirmed': True
-                }
+        # 检查旗面结束后的 K 线（突破 K 线）
+        for breakout_idx in range(flag_end + 1, len(df)):
+            breakout_k = df.iloc[breakout_idx]
+            
+            if pole['direction'] == 'BULL':
+                # 牛市旗：突破旗面高点
+                breakout_level = flag['high']
+                if breakout_k['high'] > breakout_level:
+                    breakout_strength = (breakout_k['high'] - breakout_level) / breakout_level * 100
+                    return {
+                        'type': 'BULLISH',
+                        'level': breakout_level,
+                        'strength': breakout_strength,
+                        'confirmed': True,
+                        'breakout_idx': breakout_idx
+                    }
+            else:
+                # 熊市旗：突破旗面低点
+                breakout_level = flag['low']
+                if breakout_k['low'] < breakout_level:
+                    breakout_strength = (breakout_level - breakout_k['low']) / breakout_level * 100
+                    return {
+                        'type': 'BEARISH',
+                        'level': breakout_level,
+                        'strength': breakout_strength,
+                        'confirmed': True,
+                        'breakout_idx': breakout_idx
+                    }
         
         return None
     
