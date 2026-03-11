@@ -27,6 +27,7 @@ from strategies.multi_timeframe import MultiTimeframeStrategy
 from strategies.volatility_squeeze import VolatilitySqueezeStrategy
 from strategies.money_flow import MoneyFlowStrategy
 from strategies.liquidity_hunt import LiquidityHuntStrategy
+from strategies.flag_pattern import FlagPatternStrategy
 from strategies.trend_follow import TrendFollowStrategy
 from strategies.rsi_reversal import RSIMeanReversionStrategy
 from strategies.donchian_breakout import DonchianBreakoutStrategy
@@ -54,7 +55,8 @@ class BacktestEngine:
             'donchian_breakout': DonchianBreakoutStrategy(),
             'volatility_squeeze': VolatilitySqueezeStrategy(),
             'money_flow': MoneyFlowStrategy(),
-            'liquidity_hunt': LiquidityHuntStrategy()
+            'liquidity_hunt': LiquidityHuntStrategy(),
+            'flag_pattern': FlagPatternStrategy()
         }
         
         # 回测结果
