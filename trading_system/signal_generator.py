@@ -22,7 +22,8 @@ from strategies import (
     MultiTimeframeStrategy,
     VolatilitySqueezeStrategy,
     MoneyFlowStrategy,
-    LiquidityHuntStrategy
+    LiquidityHuntStrategy,
+    FlagPatternStrategy
 )
 from feishu_notifier import FeishuNotifier, SignalMessage
 from ai_scorer import AIScorer
@@ -234,14 +235,16 @@ class SignalGenerator:
             'multi_timeframe': MultiTimeframeStrategy(),
             'volatility_squeeze': VolatilitySqueezeStrategy(),
             'money_flow': MoneyFlowStrategy(),
-            'liquidity_hunt': LiquidityHuntStrategy()
+            'liquidity_hunt': LiquidityHuntStrategy(),
+            'flag_pattern': FlagPatternStrategy()
         }
         
         self.strategy_stats = {
             'multi_timeframe': {'win_rate': 58.0, 'sharpe': 1.05, 'last_10': '+15.3%'},
             'volatility_squeeze': {'win_rate': 55.0, 'sharpe': 1.20, 'last_10': '+18.5%'},
             'money_flow': {'win_rate': 60.0, 'sharpe': 1.15, 'last_10': '+22.1%'},
-            'liquidity_hunt': {'win_rate': 57.0, 'sharpe': 1.25, 'last_10': '+19.8%'}
+            'liquidity_hunt': {'win_rate': 57.0, 'sharpe': 1.25, 'last_10': '+19.8%'},
+            'flag_pattern': {'win_rate': 55.0, 'sharpe': 1.10, 'last_10': '+12.5%'}
         }
     
     def _load_notification_config(self) -> dict:
