@@ -112,10 +112,25 @@ class AIScorer:
         else:
             template = self._get_default_template()
         
-        # 填充数据
+        # 填充数据（确保数值类型正确并格式化）
+        entry_price = signal.get('entry_price', 0)
+        if isinstance(entry_price, str):
+            try:
+                entry_price = float(entry_price)
+            except:
+                entry_price = 0
+        
+        # 根据价格大小决定格式化方式
+        if entry_price < 0.01:
+            current_price_fmt = f"{entry_price:.6f}".rstrip('0').rstrip('.')
+        elif entry_price < 1:
+            current_price_fmt = f"{entry_price:.4f}".rstrip('0').rstrip('.')
+        else:
+            current_price_fmt = f"{entry_price:,.2f}"
+        
         prompt = template.format(
             symbol=signal.get('symbol', 'BTCUSDT'),
-            current_price=signal.get('entry_price', 0),
+            current_price=current_price_fmt,
             direction=signal.get('direction', 'LONG'),
             timeframe=signal.get('timeframe', '4H'),
             
