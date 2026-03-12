@@ -434,15 +434,14 @@ def main():
         for signal in new_signals_final:
             try:
                 card = create_signal_card(signal)
-                # 直接发送卡片数据
-                payload = {"msg_type": "interactive", "card": card}
-                resp = requests.post(notifier.webhook_url, json=payload, timeout=10)
+                # create_signal_card 已经返回完整格式，直接发送
+                resp = requests.post(notifier.webhook_url, json=card, timeout=10)
                 result = resp.json()
                 if result.get('StatusCode') == 0 or result.get('code') == 0:
                     print(f"   ✅ {signal['symbol']} 推送成功")
                 else:
                     print(f"   ⚠️ {signal['symbol']} 推送返回：{result}")
-                time.sleep(0.5)
+                time.sleep(1)  # 避免限流
             except Exception as e:
                 print(f"   ❌ {signal['symbol']} 推送失败：{e}")
     
