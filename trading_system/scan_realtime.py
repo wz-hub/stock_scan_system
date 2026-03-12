@@ -333,7 +333,46 @@ def main():
     ai_skipped = 0
     for signal in new_signals:
         try:
-            market_data = {'klines_4h': [], 'klines_1d': [], 'adx': 25.0, 'rsi': 60.0, 'macd_status': '', 'volume_ratio': 1.5}
+            # 获取真实 K 线数据给 AI
+            symbol = signal['symbol']
+            klines_4h = db.get_klines(symbol, '4h', limit=50)
+            klines_1d = db.get_klines(symbol, '1d', limit=30)
+            
+            # 转换为 dict 格式
+            klines_4h_list = []
+            klines_1d_list = []
+            
+            if klines_4h is not None:
+                for idx, row in klines_4h.tail(10).iterrows():
+                    klines_4h_list.append({
+                        'timestamp': int(idx.timestamp() * 1000),
+                        'open': float(row['open']),
+                        'high': float(row['high']),
+                        'low': float(row['low']),
+                        'close': float(row['close']),
+                        'volume': float(row['volume'])
+                    })
+            
+            if klines_1d is not None:
+                for idx, row in klines_1d.tail(10).iterrows():
+                    klines_1d_list.append({
+                        'timestamp': int(idx.timestamp() * 1000),
+                        'open': float(row['open']),
+                        'high': float(row['high']),
+                        'low': float(row['low']),
+                        'close': float(row['close']),
+                        'volume': float(row['volume'])
+                    })
+            
+            market_data = {
+                'klines_4h': klines_4h_list,
+                'klines_1d': klines_1d_list,
+                'adx': 25.0,
+                'rsi': 60.0,
+                'macd_status': '',
+                'volume_ratio': 1.5
+            }
+            
             ai_result = scorer.score(signal, market_data)
             if ai_result:
                 signal['ai_score'] = ai_result['confidence']
@@ -342,8 +381,10 @@ def main():
                 print(f"   ✅ {signal['symbol']} {signal['direction']}: AI {ai_result['direction']} ({ai_result['confidence']}%)")
             else:
                 ai_skipped += 1
+                print(f"   ⚠️ {signal['symbol']}: AI 评分返回空")
         except Exception as e:
             ai_skipped += 1
+            print(f"   ❌ {signal['symbol']}: AI 评分异常 {e}")
     
     print(f"   AI 评分完成：{len(new_signals)} 个成功，{ai_skipped} 个失败")
     
@@ -383,8 +424,14 @@ def main():
         for signal in new_signals_final:
             try:
                 card = create_signal_card(signal)
-                notifier.send_card(card)
-                print(f"   ✅ {signal['symbol']} 推送成功")
+                # 直接发送卡片数据
+                payload = {"msg_type": "interactive", "card": card}
+                resp = requests.post(notifier.webhook_url, json=payload, timeout=10)
+                result = resp.json()
+                if result.get('StatusCode') == 0 or result.get('code') == 0:
+                    print(f"   ✅ {signal['symbol']} 推送成功")
+                else:
+                    print(f"   ⚠️ {signal['symbol']} 推送返回：{result}")
                 time.sleep(0.5)
             except Exception as e:
                 print(f"   ❌ {signal['symbol']} 推送失败：{e}")
