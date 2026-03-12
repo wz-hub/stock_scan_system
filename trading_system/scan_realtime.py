@@ -329,6 +329,16 @@ def main():
     print(f"\n🤖 AI 评分（仅供参考）...")
     print(f"   待评分信号：{len(new_signals)} 个")
     
+    # 确保信号中的数值类型正确
+    for signal in new_signals:
+        for key in ['entry_price', 'stop_loss_price', 'take_profit_price', 'confidence']:
+            val = signal.get(key)
+            if val is not None and isinstance(val, str):
+                try:
+                    signal[key] = float(val)
+                except:
+                    pass
+    
     scorer = AIScorer()
     ai_skipped = 0
     for signal in new_signals:
