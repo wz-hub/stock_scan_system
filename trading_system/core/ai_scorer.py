@@ -170,7 +170,7 @@ class AIScorer:
 
 ## 市场数据
 
-### {symbol} - {current_price:,.2f} USDT
+### {symbol} - {current_price} USDT
 **方向**: {direction} ({timeframe})
 
 #### 4H K 线 (最近 10 根)
@@ -184,7 +184,7 @@ class AIScorer:
 - **RSI**: {rsi}
 - **MACD**: {macd}
 - **成交量**: {volume_ratio}x
-- **OI 变化**: {oi_change:+.2f}%
+- **OI 变化**: {oi_change}%
 
 ---
 
