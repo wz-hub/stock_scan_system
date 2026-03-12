@@ -205,9 +205,35 @@ class AIScorer:
             # 支持 timestamp 和 time 两种字段名
             timestamp = k.get('timestamp', k.get('time', 0))
             time_str = datetime.fromtimestamp(timestamp/1000).strftime('%m-%d %H:%M')
+            
+            # 根据价格大小决定小数位（和飞书卡片一致）
+            open_val = float(k.get('open', 0))
+            high_val = float(k.get('high', 0))
+            low_val = float(k.get('low', 0))
+            close_val = float(k.get('close', 0))
+            
+            if close_val < 0.01:
+                # 超低价币种保留 6 位
+                open_fmt = f"{open_val:.6f}".rstrip('0').rstrip('.')
+                high_fmt = f"{high_val:.6f}".rstrip('0').rstrip('.')
+                low_fmt = f"{low_val:.6f}".rstrip('0').rstrip('.')
+                close_fmt = f"{close_val:.6f}".rstrip('0').rstrip('.')
+            elif close_val < 1:
+                # 低价币种保留 4 位
+                open_fmt = f"{open_val:.4f}".rstrip('0').rstrip('.')
+                high_fmt = f"{high_val:.4f}".rstrip('0').rstrip('.')
+                low_fmt = f"{low_val:.4f}".rstrip('0').rstrip('.')
+                close_fmt = f"{close_val:.4f}".rstrip('0').rstrip('.')
+            else:
+                # 正常价格保留 2 位
+                open_fmt = f"{open_val:.2f}"
+                high_fmt = f"{high_val:.2f}"
+                low_fmt = f"{low_val:.2f}"
+                close_fmt = f"{close_val:.2f}"
+            
             lines.append(
-                f"{time_str}    {k['open']:>8.2f}  {k['high']:>8.2f}  "
-                f"{k['low']:>8.2f}  {k['close']:>8.2f}  {k['volume']:>8.0f}"
+                f"{time_str}    {open_fmt:>10}  {high_fmt:>10}  "
+                f"{low_fmt:>10}  {close_fmt:>10}  {k.get('volume', 0):>12.0f}"
             )
         
         return "\n".join(lines)
