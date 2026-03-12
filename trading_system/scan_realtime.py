@@ -20,7 +20,9 @@ from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 
-sys.path.insert(0, str(Path(__file__).parent))
+# 添加项目根目录到 Python 路径
+PROJECT_ROOT = Path(__file__).parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from feishu_notifier import FeishuNotifier, SignalMessage
 from database import MarketDatabase
@@ -323,11 +325,11 @@ def main():
         else:
             filtered_count += len(signals)
     
-    print(f"\n🤖 AI 评分...")
+    # AI 评分（仅用于参考，不参与决策）
+    print(f"\n🤖 AI 评分（仅供参考）...")
     print(f"   待评分信号：{len(new_signals)} 个")
     
     scorer = AIScorer()
-    ai_scored_signals = []
     ai_skipped = 0
     for signal in new_signals:
         try:
@@ -337,17 +339,17 @@ def main():
                 signal['ai_score'] = ai_result['confidence']
                 signal['ai_direction'] = ai_result['direction']
                 signal['ai_reason'] = ai_result['reason']
-                ai_scored_signals.append(signal)
                 print(f"   ✅ {signal['symbol']} {signal['direction']}: AI {ai_result['direction']} ({ai_result['confidence']}%)")
             else:
                 ai_skipped += 1
         except Exception as e:
             ai_skipped += 1
     
-    print(f"   AI 评分完成：{len(ai_scored_signals)} 个成功，{ai_skipped} 个失败")
+    print(f"   AI 评分完成：{len(new_signals)} 个成功，{ai_skipped} 个失败")
     
+    # AI 评分不影响推送，直接去重
     new_signals_final = []
-    for signal in ai_scored_signals:
+    for signal in new_signals:
         sig_hash = signal_hash(signal['symbol'], signal, signal.get('timeframe', '1D'))
         if sig_hash not in old_signal_hashes:
             new_signals_final.append(signal)
@@ -381,7 +383,7 @@ def main():
         for signal in new_signals_final:
             try:
                 card = create_signal_card(signal)
-                notifier.send(card)
+                notifier.send_card(card)
                 print(f"   ✅ {signal['symbol']} 推送成功")
                 time.sleep(0.5)
             except Exception as e:

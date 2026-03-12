@@ -1,0 +1,12 @@
+{
+  "ai": {
+    "provider": "deepseek",
+    "model": "deepseek-chat",
+    "api_key": "sk-c5e3db4cd95f43478464c85374cbb252",
+    "base_url": "https://api.deepseek.com/v1",
+    "temperature": 0.3,
+    "max_tokens": 150,
+    "timeout": 30,
+    "note": "DeepSeek AI 评分"
+  }
+}
