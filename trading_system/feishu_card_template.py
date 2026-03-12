@@ -52,6 +52,18 @@ def create_signal_card(signal: dict) -> dict:
     else:
         conf_badge = "👁️低"
     
+    # 确保数值类型正确并格式化
+    try:
+        entry_price_fmt = f"{float(entry_price):,.2f}" if entry_price else "0.00"
+        stop_loss_fmt = f"{float(stop_loss):,.2f}" if stop_loss else "0.00"
+        take_profit_fmt = f"{float(take_profit):,.2f}" if take_profit else "0.00"
+        confidence_fmt = f"{float(confidence):.0f}" if confidence else "0"
+    except (ValueError, TypeError):
+        entry_price_fmt = "0.00"
+        stop_loss_fmt = "0.00"
+        take_profit_fmt = "0.00"
+        confidence_fmt = "0"
+    
     # 构建卡片内容
     elements = [
         {
@@ -64,11 +76,11 @@ def create_signal_card(signal: dict) -> dict:
         {
             "tag": "div",
             "fields": [
-                {"is_short": True, "text": {"tag": "lark_md", "content": f"**💰 入场**\n{entry_price:,.2f}"}},
-                {"is_short": True, "text": {"tag": "lark_md", "content": f"**🛑 止损**\n{stop_loss:,.2f}"}},
-                {"is_short": True, "text": {"tag": "lark_md", "content": f"**🎯 止盈**\n{take_profit:,.2f}"}},
+                {"is_short": True, "text": {"tag": "lark_md", "content": f"**💰 入场**\n{entry_price_fmt}"}},
+                {"is_short": True, "text": {"tag": "lark_md", "content": f"**🛑 止损**\n{stop_loss_fmt}"}},
+                {"is_short": True, "text": {"tag": "lark_md", "content": f"**🎯 止盈**\n{take_profit_fmt}"}},
                 {"is_short": True, "text": {"tag": "lark_md", "content": f"**📊 盈亏比**\n3.0:1"}},
-                {"is_short": True, "text": {"tag": "lark_md", "content": f"**💪 置信度**\n{confidence:.0f}%"}},
+                {"is_short": True, "text": {"tag": "lark_md", "content": f"**💪 置信度**\n{confidence_fmt}%"}},
                 {"is_short": True, "text": {"tag": "lark_md", "content": f"**💰 仓位**\n{signal.get('position_label', '标准')}"}},
             ]
         }
