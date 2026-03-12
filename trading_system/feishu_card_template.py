@@ -53,10 +53,29 @@ def create_signal_card(signal: dict) -> dict:
         conf_badge = "👁️低"
     
     # 确保数值类型正确并格式化
+    # 加密货币价格需要保留足够小数位（特别是低价币种）
     try:
-        entry_price_fmt = f"{float(entry_price):,.2f}" if entry_price else "0.00"
-        stop_loss_fmt = f"{float(stop_loss):,.2f}" if stop_loss else "0.00"
-        take_profit_fmt = f"{float(take_profit):,.2f}" if take_profit else "0.00"
+        entry_price_val = float(entry_price) if entry_price else 0
+        stop_loss_val = float(stop_loss) if stop_loss else 0
+        take_profit_val = float(take_profit) if take_profit else 0
+        
+        # 根据价格大小决定小数位数
+        if entry_price_val < 0.01:
+            # 超低价币种（如 0.00027）保留 6 位小数
+            entry_price_fmt = f"{entry_price_val:.6f}".rstrip('0').rstrip('.')
+            stop_loss_fmt = f"{stop_loss_val:.6f}".rstrip('0').rstrip('.')
+            take_profit_fmt = f"{take_profit_val:.6f}".rstrip('0').rstrip('.')
+        elif entry_price_val < 1:
+            # 低价币种（如 0.2063）保留 4 位小数
+            entry_price_fmt = f"{entry_price_val:.4f}".rstrip('0').rstrip('.')
+            stop_loss_fmt = f"{stop_loss_val:.4f}".rstrip('0').rstrip('.')
+            take_profit_fmt = f"{take_profit_val:.4f}".rstrip('0').rstrip('.')
+        else:
+            # 正常价格保留 2 位小数
+            entry_price_fmt = f"{entry_price_val:,.2f}"
+            stop_loss_fmt = f"{stop_loss_val:,.2f}"
+            take_profit_fmt = f"{take_profit_val:,.2f}"
+        
         confidence_fmt = f"{float(confidence):.0f}" if confidence else "0"
     except (ValueError, TypeError):
         entry_price_fmt = "0.00"
