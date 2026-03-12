@@ -128,6 +128,15 @@ class AIScorer:
         else:
             current_price_fmt = f"{entry_price:,.2f}"
         
+        # 格式化 oi_change
+        oi_change_val = market_data.get('oi_change_pct', 0)
+        if isinstance(oi_change_val, str):
+            try:
+                oi_change_val = float(oi_change_val)
+            except:
+                oi_change_val = 0
+        oi_change_fmt = f"{oi_change_val:+.2f}"
+        
         prompt = template.format(
             symbol=signal.get('symbol', 'BTCUSDT'),
             current_price=current_price_fmt,
@@ -139,13 +148,13 @@ class AIScorer:
             klines_1d=self._format_klines(market_data.get('klines_1d', [])),
             
             # 技术指标
-            adx=market_data.get('adx', 0),
-            rsi=market_data.get('rsi', 0),
+            adx=float(market_data.get('adx', 0) or 0),
+            rsi=float(market_data.get('rsi', 0) or 0),
             macd=market_data.get('macd_status', ''),
-            volume_ratio=market_data.get('volume_ratio', 1.0),
+            volume_ratio=float(market_data.get('volume_ratio', 1.0) or 1.0),
             
             # 持仓量
-            oi_change=market_data.get('oi_change_pct', 0),
+            oi_change=oi_change_fmt,
             
             # 时间
             current_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
