@@ -169,11 +169,14 @@ if page == "📡 信号中心":
                 # 转换为 DataFrame
                 df_signals = pd.DataFrame(filtered_signals)
                 
-                # 格式化显示列
-                display_df = df_signals.copy()
-                display_df['价格'] = display_df['entry_price'].apply(lambda x: f"${x:,.4f}" if x < 1 else f"${x:,.2f}")
-                display_df['置信度'] = display_df['confidence'].apply(lambda x: f"{x:.0f}%")
-                display_df['时间'] = display_df['created_at'].apply(lambda x: str(x)[:10] if pd.notna(x) else '')
+                # 格式化并选择要显示的列
+                display_df = pd.DataFrame()
+                display_df['时间'] = df_signals['created_at'].apply(lambda x: str(x)[:10] if pd.notna(x) else '')
+                display_df['币种'] = df_signals['symbol']
+                display_df['策略'] = df_signals['strategy_name']
+                display_df['方向'] = df_signals['direction']
+                display_df['价格'] = df_signals['entry_price'].apply(lambda x: f"${x:,.4f}" if x < 1 else f"${x:,.2f}")
+                display_df['置信度'] = df_signals['confidence'].apply(lambda x: f"{x:.0f}%")
                 
                 # AI 判断列
                 def get_ai_label(row):
@@ -190,25 +193,11 @@ if page == "📡 信号中心":
                     else:
                         return f"❌ {ai_dir} ({score}%)"
                 
-                display_df['AI 判断'] = display_df.apply(get_ai_label, axis=1)
-                
-                # 选择显示的列
-                show_cols = ['时间', 'symbol', 'strategy_name', 'direction', '价格', '置信度', 'AI 判断']
-                
-                # 重命名
-                rename_map = {
-                    'symbol': '币种',
-                    'strategy_name': '策略',
-                    'direction': '方向',
-                    'entry_price': '价格',
-                    'confidence': '置信度',
-                    'created_at': '时间'
-                }
-                display_df = display_df.rename(columns=rename_map)
+                display_df['AI 判断'] = df_signals.apply(get_ai_label, axis=1)
                 
                 # 显示表格
                 st.dataframe(
-                    display_df[[rename_map.get(col, col) for col in show_cols if rename_map.get(col, col) in display_df.columns]],
+                    display_df,
                     use_container_width=True,
                     hide_index=True,
                     height=400
@@ -218,78 +207,81 @@ if page == "📡 信号中心":
             st.subheader(f"📋 信号卡片详情 ({len(filtered_signals)} 个)")
             
             # 显示信号卡片
-            for signal in filtered_signals[:20]:  # 只显示最新 20 个
-                action = signal.get('action', 'BUY')
-                priority = signal.get('priority', 'MEDIUM')
-                strategy = signal.get('strategy_name', 'Unknown')
-                symbol = signal.get('symbol', 'N/A')
-                price = signal.get('entry_price', 0)
-                confidence = signal.get('confidence', 0)
-                timestamp = signal.get('created_at', '')[:16].replace('T', ' ')
-                reason = signal.get('reason', 'N/A')
-                stop_loss = signal.get('stop_loss_price', 0)
-                take_profit = signal.get('take_profit_price', 0)
-                rr = signal.get('risk_reward_ratio', 0)
-            
-            action_emoji = "🟢" if action == "BUY" else "🔴"
-            direction = signal.get('direction', 'LONG')
-            ai_score = signal.get('ai_score')
-            ai_direction = signal.get('ai_direction')
-            ai_reason = signal.get('ai_reason', '')
-            
-            # 判断 AI 一致性
-            ai_status = "unknown"
-            if ai_direction:
-                if ai_direction == 'WAIT':
-                    ai_status = "wait"
-                elif ai_direction == direction:
-                    ai_status = "agree"
-                else:
-                    ai_status = "disagree"
-            
-            with st.container():
-                st.markdown(f"### {action_emoji}【{strategy}】{symbol} {direction}")
-                
-                # AI 状态标识
-                if ai_status == "agree":
-                    st.markdown('<span style="background: linear-gradient(135deg, #1b5e20, #2e7d32); padding: 5px 10px; border-radius: 5px; display: inline-block; font-weight: bold; margin-bottom: 10px;">✅ AI 同意</span>', unsafe_allow_html=True)
-                elif ai_status == "disagree":
-                    st.markdown(f'<span style="background: linear-gradient(135deg, #b71c1c, #c62828); padding: 5px 10px; border-radius: 5px; display: inline-block; font-weight: bold; margin-bottom: 10px;">❌ AI 反对 ({ai_direction})</span>', unsafe_allow_html=True)
-                elif ai_status == "wait":
-                    st.markdown('<span style="background: linear-gradient(135deg, #f57f17, #f9a825); padding: 5px 10px; border-radius: 5px; display: inline-block; font-weight: bold; margin-bottom: 10px;">⏸️ AI 观望</span>', unsafe_allow_html=True)
-                
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("💰 价格", f"${price:,.4f}" if price < 1 else f"${price:,.2f}")
-                with col2:
-                    st.metric("📈 置信度", f"{confidence:.0f}%")
-                with col3:
-                    st.metric("📅 时间", timestamp[:10])
-                with col4:
-                    if ai_score:
-                        st.metric("🤖 AI 评分", f"{ai_score}%")
-                    else:
-                        st.metric("🤖 AI 评分", "未评分")
-                
-                # 信号理由
-                with st.expander("💡 信号理由", expanded=False):
-                    st.write(reason)
-                
-                # AI 理由
-                if ai_reason:
-                    with st.expander("🤖 AI 分析", expanded=False):
-                        st.write(ai_reason)
-                
-                st.markdown("**📐 风险管理**")
-                risk_col1, risk_col2, risk_col3 = st.columns(3)
-                with risk_col1:
-                    st.error(f"🛑 止损\n${stop_loss:,.4f}" if stop_loss < 1 else f"🛑 止损\n${stop_loss:,.2f}")
-                with risk_col2:
-                    st.success(f"🎯 止盈\n${take_profit:,.4f}" if take_profit < 1 else f"🎯 止盈\n${take_profit:,.2f}")
-                with risk_col3:
-                    st.metric("📊 盈亏比", f"{rr}:1")
-                
-                st.divider()
+            if not filtered_signals:
+                st.info("暂无信号数据")
+            else:
+                for signal in filtered_signals[:20]:  # 只显示最新 20 个
+                    action = signal.get('action', 'BUY')
+                    priority = signal.get('priority', 'MEDIUM')
+                    strategy = signal.get('strategy_name', 'Unknown')
+                    symbol = signal.get('symbol', 'N/A')
+                    price = signal.get('entry_price', 0)
+                    confidence = signal.get('confidence', 0)
+                    timestamp = signal.get('created_at', '')[:16].replace('T', ' ')
+                    reason = signal.get('reason', 'N/A')
+                    stop_loss = signal.get('stop_loss_price', 0)
+                    take_profit = signal.get('take_profit_price', 0)
+                    rr = signal.get('risk_reward_ratio', 0)
+                    
+                    action_emoji = "🟢" if action == "BUY" else "🔴"
+                    direction = signal.get('direction', 'LONG')
+                    ai_score = signal.get('ai_score')
+                    ai_direction = signal.get('ai_direction')
+                    ai_reason = signal.get('ai_reason', '')
+                    
+                    # 判断 AI 一致性
+                    ai_status = "unknown"
+                    if ai_direction:
+                        if ai_direction == 'WAIT':
+                            ai_status = "wait"
+                        elif ai_direction == direction:
+                            ai_status = "agree"
+                        else:
+                            ai_status = "disagree"
+                    
+                    with st.container():
+                        st.markdown(f"### {action_emoji}【{strategy}】{symbol} {direction}")
+                        
+                        # AI 状态标识
+                        if ai_status == "agree":
+                            st.markdown('<span style="background: linear-gradient(135deg, #1b5e20, #2e7d32); padding: 5px 10px; border-radius: 5px; display: inline-block; font-weight: bold; margin-bottom: 10px;">✅ AI 同意</span>', unsafe_allow_html=True)
+                        elif ai_status == "disagree":
+                            st.markdown(f'<span style="background: linear-gradient(135deg, #b71c1c, #c62828); padding: 5px 10px; border-radius: 5px; display: inline-block; font-weight: bold; margin-bottom: 10px;">❌ AI 反对 ({ai_direction})</span>', unsafe_allow_html=True)
+                        elif ai_status == "wait":
+                            st.markdown('<span style="background: linear-gradient(135deg, #f57f17, #f9a825); padding: 5px 10px; border-radius: 5px; display: inline-block; font-weight: bold; margin-bottom: 10px;">⏸️ AI 观望</span>', unsafe_allow_html=True)
+                        
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("💰 价格", f"${price:,.4f}" if price < 1 else f"${price:,.2f}")
+                        with col2:
+                            st.metric("📈 置信度", f"{confidence:.0f}%")
+                        with col3:
+                            st.metric("📅 时间", timestamp[:10])
+                        with col4:
+                            if ai_score:
+                                st.metric("🤖 AI 评分", f"{ai_score}%")
+                            else:
+                                st.metric("🤖 AI 评分", "未评分")
+                        
+                        # 信号理由
+                        with st.expander("💡 信号理由", expanded=False):
+                            st.write(reason)
+                        
+                        # AI 理由
+                        if ai_reason:
+                            with st.expander("🤖 AI 分析", expanded=False):
+                                st.write(ai_reason)
+                        
+                        st.markdown("**📐 风险管理**")
+                        risk_col1, risk_col2, risk_col3 = st.columns(3)
+                        with risk_col1:
+                            st.error(f"🛑 止损\n${stop_loss:,.4f}" if stop_loss < 1 else f"🛑 止损\n${stop_loss:,.2f}")
+                        with risk_col2:
+                            st.success(f"🎯 止盈\n${take_profit:,.4f}" if take_profit < 1 else f"🎯 止盈\n${take_profit:,.2f}")
+                        with risk_col3:
+                            st.metric("📊 盈亏比", f"{rr}:1")
+                        
+                        st.divider()
     
     else:
         st.warning("暂无信号，等待下次扫描...")
