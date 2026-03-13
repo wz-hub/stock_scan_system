@@ -140,18 +140,21 @@ class AIScorer:
         prompt = template.format(
             symbol=signal.get('symbol', 'BTCUSDT'),
             current_price=current_price_fmt,
-            direction=signal.get('direction', 'LONG'),
             timeframe=signal.get('timeframe', '4H'),
             
             # K 线数据
-            klines_4h=self._format_klines(market_data.get('klines_4h', [])),
-            klines_1d=self._format_klines(market_data.get('klines_1d', [])),
+            klines_1d=self._format_klines(market_data.get('klines_1d', []), label='1D'),
+            klines_4h=self._format_klines(market_data.get('klines_4h', []), label='4H'),
+            klines_1h=self._format_klines(market_data.get('klines_1h', []), label='1H'),
             
             # 技术指标
             adx=float(market_data.get('adx', 0) or 0),
             rsi=float(market_data.get('rsi', 0) or 0),
             macd=market_data.get('macd_status', ''),
+            macd_histogram=float(market_data.get('macd_histogram', 0) or 0),
             volume_ratio=float(market_data.get('volume_ratio', 1.0) or 1.0),
+            atr=float(market_data.get('atr', 0) or 0),
+            bb_position=float(market_data.get('bb_position', 0.5) or 0.5),
             
             # 持仓量
             oi_change=oi_change_fmt,
@@ -164,56 +167,75 @@ class AIScorer:
     
     def _get_default_template(self) -> str:
         """获取默认 Prompt 模板"""
-        return """# 交易信号分析
+        return """## 角色设定
+
+你是一位资深加密货币量化交易分析师，拥有 10 年传统金融市场 + 5 年加密货币市场经验。
+
+### 专业能力
+- **技术分析**: 精通 K 线形态、技术指标、多周期分析
+- **趋势判断**: 擅长识别趋势方向、强度、转折点
+- **风险管理**: 严格评估风险收益比、波动率、市场异常
+- **量化思维**: 基于数据决策，避免情绪化判断
+
+### 分析原则
+1. **客观独立**: 不受任何预设立场影响，只看数据说话
+2. **风险优先**: 先评估风险，再考虑收益
+3. **概率思维**: 市场无绝对，只谈概率和把握度
+4. **简洁明确**: 结论清晰，理由充分，不模棱两可
+
+### 输出要求
+- 方向判断必须有 K 线形态或指标支撑
+- 把握度反映真实信心，不要为了"正确"而保守
+- 理由一句话点明核心逻辑，不说废话
+- 如果数据不足或市场混乱，果断选择 WAIT
+
+---
+
+请基于以下市场数据，给出你的专业分析：
+
+---
+
+# 交易信号分析
 
 **时间**: {current_time}
 
-## 市场数据
+## 当前市场
 
 ### {symbol} - {current_price} USDT
-**方向**: {direction} ({timeframe})
+**周期**: {timeframe}
 
-#### 4H K 线 (最近 10 根)
-{klines_4h}
-
-#### 1D K 线 (最近 10 根)
+#### 1D K 线 (最近 30 根)
 {klines_1d}
 
-### 指标
+#### 4H K 线 (最近 50 根)
+{klines_4h}
+
+#### 1H K 线 (最近 100 根)
+{klines_1h}
+
+### 技术指标
 - **ADX**: {adx}
 - **RSI**: {rsi}
-- **MACD**: {macd}
-- **成交量**: {volume_ratio}x
-- **OI 变化**: {oi_change}%
+- **MACD**: {macd} ({macd_histogram:+.6f})
+- **ATR**: {atr}
+- **布林带**: {bb_position:.2f}
+- **Vol**: {volume_ratio:.2f}x
+
+### OI
+- **变化**: {oi_change}%
 
 ---
 
-## 请回答
-
-1. **方向**: 做多 (LONG) / 做空 (SHORT) / 观望 (WAIT)？
-2. **把握**: 0-100 分 (0=没把握，100=肯定)
-3. **理由**: 一句话说明
-
----
-
-## 输出格式（严格 JSON）
-
-```json
-{{
-  "direction": "LONG",
-  "confidence": 85,
-  "reason": "一句话理由"
-}}
-```
-
-**注意**: 只输出 JSON，不要其他内容。"""
+## 输出：方向 (LONG/SHORT/WAIT)+ 把握 (0-100)+ 理由 → JSON
+"""
     
-    def _format_klines(self, klines: List[Dict]) -> str:
+    def _format_klines(self, klines: List[Dict], label: str = '') -> str:
         """
         格式化 K 线数据为表格
         
         Args:
             klines: K 线列表
+            label: 时间周期标签 (1D/4H/1H)
         
         Returns:
             格式化的表格文本
@@ -224,8 +246,9 @@ class AIScorer:
         lines = []
         lines.append("时间 (UTC)      开盘      最高      最低      收盘      成交量")
         
-        # 只显示最近 10 根 (减少数据量，加快速度)
-        for k in klines[-10:]:
+        # 显示最近 N 根 (根据周期决定)
+        display_count = 30 if label == '1D' else (50 if label == '4H' else 100)
+        for k in klines[-display_count:]:
             # 支持 timestamp 和 time 两种字段名
             timestamp = k.get('timestamp', k.get('time', 0))
             time_str = datetime.fromtimestamp(timestamp/1000).strftime('%m-%d %H:%M')
@@ -254,6 +277,15 @@ class AIScorer:
                 high_fmt = f"{high_val:.2f}"
                 low_fmt = f"{low_val:.2f}"
                 close_fmt = f"{close_val:.2f}"
+            
+            # ATR 也根据价格调整
+            atr_val = float(k.get('atr', 0))
+            if atr_val < 0.01:
+                atr_fmt = f"{atr_val:.6f}".rstrip('0').rstrip('.')
+            elif atr_val < 1:
+                atr_fmt = f"{atr_val:.4f}".rstrip('0').rstrip('.')
+            else:
+                atr_fmt = f"{atr_val:.2f}"
             
             lines.append(
                 f"{time_str}    {open_fmt:>10}  {high_fmt:>10}  "

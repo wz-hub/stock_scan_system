@@ -9,7 +9,8 @@ from datetime import datetime
 from typing import List, Dict, Optional
 import json
 
-DB_FILE = Path('cache/signals.db')
+# 使用统一的数据库
+DB_FILE = Path('cache/trading.db')
 DB_FILE.parent.mkdir(exist_ok=True)
 
 
@@ -97,8 +98,8 @@ class SignalTracker:
                 signal_dict.get('action', ''),
                 signal_dict.get('direction', ''),
                 float(signal_dict.get('entry_price', 0)),
-                float(signal_dict.get('stop_loss_price', 0)),
-                float(signal_dict.get('take_profit_price', 0)),
+                float(signal_dict.get('stop_loss', 0) or signal_dict.get('stop_loss_price', 0)),
+                float(signal_dict.get('take_profit', 0) or signal_dict.get('take_profit_price', 0)),
                 signal_dict.get('confidence', 0),
                 signal_dict.get('timestamp', datetime.now().isoformat())
             ))
@@ -209,8 +210,8 @@ class SignalTracker:
                 self.update_price(signal['symbol'], current_price)
                 
                 # 检查止盈止损
-                stop_loss = signal['stop_loss']
-                take_profit = signal['take_profit']
+                stop_loss = signal.get('stop_loss') or signal.get('stop_loss_price', 0)
+                take_profit = signal.get('take_profit') or signal.get('take_profit_price', 0)
                 entry_price = signal['entry_price']
                 
                 should_close = False

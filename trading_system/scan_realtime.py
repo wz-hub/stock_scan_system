@@ -345,26 +345,17 @@ def main():
         try:
             # 获取真实 K 线数据给 AI
             symbol = signal['symbol']
-            klines_4h = db.get_klines(symbol, '4h', limit=50)
-            klines_1d = db.get_klines(symbol, '1d', limit=30)
+            klines_1d = db.get_klines(symbol, '1d', limit=100)
+            klines_4h = db.get_klines(symbol, '4h', limit=200)
+            klines_1h = db.get_klines(symbol, '1h', limit=300)
             
-            # 转换为 dict 格式
-            klines_4h_list = []
+            # 转换为 dict 格式（增加数据量）
             klines_1d_list = []
-            
-            if klines_4h is not None:
-                for idx, row in klines_4h.tail(10).iterrows():
-                    klines_4h_list.append({
-                        'timestamp': int(idx.timestamp() * 1000),
-                        'open': float(row['open']),
-                        'high': float(row['high']),
-                        'low': float(row['low']),
-                        'close': float(row['close']),
-                        'volume': float(row['volume'])
-                    })
+            klines_4h_list = []
+            klines_1h_list = []
             
             if klines_1d is not None:
-                for idx, row in klines_1d.tail(10).iterrows():
+                for idx, row in klines_1d.tail(30).iterrows():
                     klines_1d_list.append({
                         'timestamp': int(idx.timestamp() * 1000),
                         'open': float(row['open']),
@@ -374,13 +365,170 @@ def main():
                         'volume': float(row['volume'])
                     })
             
+            if klines_4h is not None:
+                for idx, row in klines_4h.tail(50).iterrows():
+                    klines_4h_list.append({
+                        'timestamp': int(idx.timestamp() * 1000),
+                        'open': float(row['open']),
+                        'high': float(row['high']),
+                        'low': float(row['low']),
+                        'close': float(row['close']),
+                        'volume': float(row['volume'])
+                    })
+            
+            if klines_1h is not None:
+                for idx, row in klines_1h.tail(100).iterrows():
+                    klines_1h_list.append({
+                        'timestamp': int(idx.timestamp() * 1000),
+                        'open': float(row['open']),
+                        'high': float(row['high']),
+                        'low': float(row['low']),
+                        'close': float(row['close']),
+                        'volume': float(row['volume'])
+                    })
+            
+            # 计算技术指标
+            import numpy as np
+            
+            # 使用 4H 数据计算指标
+            df_4h = klines_4h.copy() if klines_4h is not None else None
+            df_1d = klines_1d.copy() if klines_1d is not None else None
+            
+            # 计算 RSI
+            def calc_rsi(df, period=14):
+                if df is None or len(df) < period + 1:
+                    return 50.0
+                delta = df['close'].diff()
+                gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+                loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+                rs = gain / loss
+                rsi = 100 - (100 / (1 + rs))
+                return float(rsi.iloc[-1]) if not pd.isna(rsi.iloc[-1]) else 50.0
+            
+            # 计算 ADX
+            def calc_adx(df, period=14):
+                if df is None or len(df) < period * 2:
+                    return 25.0
+                high = df['high']
+                low = df['low']
+                close = df['close']
+                plus_dm = high.diff()
+                minus_dm = -low.diff()
+                plus_dm[plus_dm < 0] = 0
+                minus_dm[minus_dm < 0] = 0
+                plus_dm[(plus_dm <= minus_dm) & (minus_dm > 0)] = 0
+                minus_dm[(minus_dm <= plus_dm) & (plus_dm > 0)] = 0
+                tr1 = high - low
+                tr2 = abs(high - close.shift())
+                tr3 = abs(low - close.shift())
+                ranges = pd.concat([tr1, tr2, tr3], axis=1)
+                true_range = np.max(ranges, axis=1)
+                atr = true_range.rolling(period).mean()
+                plus_di = 100 * (plus_dm.rolling(period).mean() / atr)
+                minus_di = 100 * (minus_dm.rolling(period).mean() / atr)
+                dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)
+                adx = dx.rolling(period).mean()
+                return float(adx.iloc[-1]) if not pd.isna(adx.iloc[-1]) else 25.0
+            
+            # 计算 MACD
+            def calc_macd(df, fast=12, slow=26, signal=9):
+                if df is None or len(df) < slow + signal:
+                    return {'status': '', 'histogram': 0}
+                close = df['close']
+                exp1 = close.ewm(span=fast, adjust=False).mean()
+                exp2 = close.ewm(span=slow, adjust=False).mean()
+                macd_line = exp1 - exp2
+                signal_line = macd_line.ewm(span=signal, adjust=False).mean()
+                histogram = macd_line - signal_line
+                if histogram.iloc[-1] > 0 and histogram.iloc[-2] <= 0:
+                    status = '金叉'
+                elif histogram.iloc[-1] < 0 and histogram.iloc[-2] >= 0:
+                    status = '死叉'
+                elif histogram.iloc[-1] > 0:
+                    status = '多头'
+                else:
+                    status = '空头'
+                return {'status': status, 'histogram': float(histogram.iloc[-1])}
+            
+            # 计算 ATR
+            def calc_atr(df, period=14):
+                if df is None or len(df) < period:
+                    return float(df['close'].iloc[-1] * 0.02) if df is not None and len(df) > 0 else 0.0
+                high_low = df['high'] - df['low']
+                high_close = np.abs(df['high'] - df['close'].shift())
+                low_close = np.abs(df['low'] - df['close'].shift())
+                ranges = pd.concat([high_low, high_close, low_close], axis=1)
+                true_range = np.max(ranges, axis=1)
+                atr = true_range.rolling(period).mean()
+                return float(atr.iloc[-1]) if not pd.isna(atr.iloc[-1]) else float(df['close'].iloc[-1] * 0.02)
+            
+            # 计算布林带位置
+            def calc_bb_position(df, period=20, std_dev=2):
+                if df is None or len(df) < period:
+                    return 0.5
+                close = df['close']
+                middle = close.rolling(period).mean()
+                std = close.rolling(period).std()
+                upper = middle + (std_dev * std)
+                lower = middle - (std_dev * std)
+                current_price = close.iloc[-1]
+                upper_val = upper.iloc[-1]
+                lower_val = lower.iloc[-1]
+                if pd.isna(upper_val) or pd.isna(lower_val) or upper_val == lower_val:
+                    return 0.5
+                position = (current_price - lower_val) / (upper_val - lower_val)
+                return float(position)
+            
+            # 计算支撑/阻力位
+            def find_support_resistance(df, lookback=50):
+                if df is None or len(df) < lookback:
+                    return [], []
+                recent = df.tail(lookback)
+                highs = recent['high'].tolist()
+                lows = recent['low'].tolist()
+                # 找出局部高低点
+                resistance_levels = []
+                support_levels = []
+                for i in range(5, len(highs) - 5):
+                    if highs[i] == max(highs[i-5:i+6]):
+                        resistance_levels.append(float(highs[i]))
+                    if lows[i] == min(lows[i-5:i+6]):
+                        support_levels.append(float(lows[i]))
+                resistance_levels.sort(reverse=True)
+                support_levels.sort()
+                return resistance_levels[:3], support_levels[:3]
+            
+            # 计算成交量比率
+            def calc_volume_ratio(df, period=20):
+                if df is None or len(df) < period:
+                    return 1.0
+                avg_volume = df['volume'].rolling(period).mean().iloc[-1]
+                current_volume = df['volume'].iloc[-1]
+                if pd.isna(avg_volume) or avg_volume == 0:
+                    return 1.0
+                return float(current_volume / avg_volume)
+            
+            # 计算所有指标
+            adx = calc_adx(df_4h, 14)
+            rsi = calc_rsi(df_4h, 14)
+            macd = calc_macd(df_4h)
+            atr = calc_atr(df_4h, 14)
+            bb_position = calc_bb_position(df_4h, 20, 2)
+            volume_ratio = calc_volume_ratio(df_4h, 20)
+            resistance_levels, support_levels = find_support_resistance(df_4h, 50)
+            
             market_data = {
-                'klines_4h': klines_4h_list,
                 'klines_1d': klines_1d_list,
-                'adx': 25.0,
-                'rsi': 60.0,
-                'macd_status': '',
-                'volume_ratio': 1.5
+                'klines_4h': klines_4h_list,
+                'klines_1h': klines_1h_list,
+                'adx': adx,
+                'rsi': rsi,
+                'macd_status': macd['status'],
+                'macd_histogram': macd['histogram'],
+                'volume_ratio': volume_ratio,
+                'atr': atr,
+                'bb_position': bb_position,
+                'oi_change_pct': 0.0  # 暂时无数据，留空
             }
             
             ai_result = scorer.score(signal, market_data)
@@ -452,10 +600,33 @@ def main():
     for signal in new_signals_final:
         try:
             sig_id = signal_hash(signal['symbol'], signal, signal.get('timeframe', '1D'))
-            cursor.execute('''INSERT OR REPLACE INTO signals (signal_id, symbol, timeframe, strategy_name, action, direction, entry_price, stop_loss_price, take_profit_price, confidence, reason, position_pct, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?)''', (sig_id, signal['symbol'], signal.get('timeframe', '1D'), signal['strategy_name'], signal['action'], signal['direction'], float(signal['entry_price']), float(signal.get('stop_loss_price', 0)), float(signal.get('take_profit_price', 0)), signal.get('confidence', 70), signal.get('reason', ''), signal.get('position_pct', 10.0), datetime.now()))
+            cursor.execute('''
+                INSERT OR REPLACE INTO signals (
+                    signal_id, symbol, timeframe, strategy_name, action, direction,
+                    entry_price, stop_loss_price, take_profit_price, confidence, reason,
+                    position_pct, status, ai_score, ai_direction, ai_reason, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, ?, ?, ?)
+            ''', (
+                sig_id, 
+                signal['symbol'], 
+                signal.get('timeframe', '1D'), 
+                signal['strategy_name'], 
+                signal['action'], 
+                signal['direction'], 
+                float(signal['entry_price']), 
+                float(signal.get('stop_loss_price', 0)), 
+                float(signal.get('take_profit_price', 0)), 
+                signal.get('confidence', 70), 
+                signal.get('reason', ''), 
+                signal.get('position_pct', 10.0),
+                signal.get('ai_score'),
+                signal.get('ai_direction'),
+                signal.get('ai_reason', ''),
+                datetime.now()
+            ))
             saved_count += 1
         except Exception as e:
-            pass
+            print(f"   ❌ 保存信号失败：{e}")
     conn.commit()
     conn.close()
     print(f"   ✅ 保存 {saved_count} 个信号到数据库")
