@@ -67,7 +67,7 @@ def get_money_flow_data():
 st.sidebar.title("🎛️ 导航")
 page = st.sidebar.radio(
     "页面",
-    ["📡 信号中心", "📊 K 线图", "💰 资金流向", "⚙️ 设置"],
+    ["📡 信号中心", "📈 准确率统计", "📊 K 线图", "💰 资金流向", "⚙️ 设置"],
     index=0,
     key="nav_radio"
 )
@@ -350,6 +350,177 @@ elif page == "📊 K 线图":
     - 📈 技术指标（点击 fx）
     - 🔍 缩放平移
     """)
+
+elif page == "📈 准确率统计":
+    st.title("📈 准确率统计 - 策略 vs AI")
+    st.caption(f"数据更新：{get_beijing_time()}")
+    st.markdown("---")
+    
+    # 导入统计模块
+    try:
+        from scripts.signal_stats import SignalStats
+        stats = SignalStats()
+        
+        # 时间选择
+        days = st.sidebar.selectbox("统计周期", [7, 14, 30, 60, 90], index=2)
+        
+        # 选项卡
+        tab1, tab2, tab3 = st.tabs(["📊 策略统计", "🤖 AI 统计", "⚖️ 对比分析"])
+        
+        with tab1:
+            st.subheader(f"📊 策略表现统计 (最近 {days} 天)")
+            
+            strategy_stats = stats.calculate_strategy_stats(days)
+            
+            if strategy_stats:
+                # 转换为 DataFrame
+                df_stats = pd.DataFrame([
+                    {
+                        '策略': name,
+                        '总信号数': s['total'],
+                        '盈利': s['win'],
+                        '亏损': s['loss'],
+                        '胜率': f"{s['win_rate']:.1f}%",
+                        '平均盈亏': f"{s['avg_pnl']:+.2f}%",
+                        '总盈亏': f"{s['total_pnl']:+.2f}%"
+                    }
+                    for name, s in strategy_stats.items()
+                ])
+                
+                # 按胜率排序
+                df_stats = df_stats.sort_values('胜率', ascending=False)
+                
+                # 显示表格
+                st.dataframe(
+                    df_stats,
+                    use_container_width=True,
+                    hide_index=True,
+                    height=400
+                )
+                
+                # 最佳策略
+                if not df_stats.empty:
+                    best = df_stats.iloc[0]
+                    st.success(f"🏆 最佳策略：**{best['策略']}** - 胜率 {best['胜率']}, 总盈亏 {best['总盈亏']}")
+            else:
+                st.warning("⚠️ 暂无已平仓信号数据")
+                st.info("""
+                **💡 说明**: 
+                
+                准确率统计需要信号平仓后才会计算。
+                
+                **当前状态**:
+                - 所有信号都是 OPEN（活跃）状态
+                - 等待信号触发止盈止损
+                
+                **如何生成数据**:
+                1. 等待信号自然平仓（推荐）
+                2. 信号跟踪模块会自动检查止盈止损
+                3. 一般几小时到几天内会有平仓信号
+                """)
+        
+        with tab2:
+            st.subheader(f"🤖 AI 表现统计 (最近 {days} 天)")
+            
+            ai_stats = stats.calculate_ai_stats(days)
+            
+            if ai_stats and 'overall' in ai_stats:
+                overall = ai_stats['overall']
+                
+                # 总体统计卡片
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("总判断数", overall['total'])
+                with col2:
+                    st.metric("正确", overall['correct'])
+                with col3:
+                    st.metric("错误", overall['wrong'])
+                with col4:
+                    st.metric("准确率", f"{overall['accuracy']:.1f}%")
+                
+                st.metric("平均置信度", f"{overall['avg_confidence']:.1f}%")
+                
+                st.markdown("---")
+                
+                # 按方向统计
+                if 'by_direction' in ai_stats and ai_stats['by_direction']:
+                    st.subheader("按方向统计")
+                    
+                    for direction, dir_stats in ai_stats['by_direction'].items():
+                        emoji = "🟢" if direction == "LONG" else "🔴" if direction == "SHORT" else "⏸️"
+                        st.markdown(f"### {emoji} {direction}")
+                        
+                        dir_col1, dir_col2, dir_col3 = st.columns(3)
+                        with dir_col1:
+                            st.metric("判断数", dir_stats['total'])
+                        with dir_col2:
+                            st.metric("正确", dir_stats['correct'])
+                        with dir_col3:
+                            st.metric("准确率", f"{dir_stats['accuracy']:.1f}%")
+                        
+                        st.markdown(f"平均置信度：{dir_stats['avg_confidence']:.1f}%")
+                        st.divider()
+            else:
+                st.info("暂无 AI 评分数据")
+        
+        with tab3:
+            st.subheader("⚖️ 策略 vs AI 对比分析")
+            
+            comp_stats = stats.get_comparison_stats(days)
+            
+            if comp_stats and 'agreement' in comp_stats:
+                agree = comp_stats['agreement']
+                
+                # 一致性统计
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("总信号数", agree['total'])
+                with col2:
+                    st.metric("策略&AI 一致", agree['agree'])
+                with col3:
+                    st.metric("策略&AI 分歧", agree['disagree'])
+                
+                st.markdown("---")
+                
+                # 胜率对比
+                st.subheader("胜率对比")
+                
+                agree_col, disagree_col = st.columns(2)
+                with agree_col:
+                    st.success(f"✅ 一致时胜率：**{agree['agree_win_rate']:.1f}%**")
+                    st.caption(f"基于 {agree['agree']} 个信号")
+                with disagree_col:
+                    st.error(f"❌ 分歧时胜率：**{agree['disagree_win_rate']:.1f}%**")
+                    st.caption(f"基于 {agree['disagree']} 个信号")
+                
+                # 结论
+                st.markdown("---")
+                st.subheader("📊 分析结论")
+                
+                if agree['agree_win_rate'] > agree['disagree_win_rate']:
+                    st.info("""
+                    **💡 建议**: 当策略和 AI 判断一致时，胜率更高！
+                    
+                    可以考虑：
+                    - 只在策略和 AI 一致时交易
+                    - 一致时增加仓位
+                    - 分歧时减少仓位或观望
+                    """)
+                else:
+                    st.info("""
+                    **💡 观察**: 分歧时胜率反而更高，值得深入研究！
+                    
+                    可能原因：
+                    - AI 看到了策略没看到的因素
+                    - 策略参数需要优化
+                    - 样本量不足
+                    """)
+            else:
+                st.info("暂无对比数据")
+    
+    except Exception as e:
+        st.error(f"加载统计失败：{e}")
+        st.info("提示：需要有一定数量的已平仓信号才能生成统计")
 
 elif page == "💰 资金流向":
     st.title("💰 全市场资金流向排行榜")
