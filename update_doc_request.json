@@ -1,0 +1,8 @@
+{
+  "task": "请使用 feishu_update_doc 工具更新飞书文档",
+  "params": {
+    "doc_id": "Kekcdlaypo4wwrxQjuccRFk6nyh",
+    "mode": "overwrite",
+    "markdown_file": "/home/wz/.openclaw/workspace/ml_trading/DOC_CONTENT.md"
+  }
+}

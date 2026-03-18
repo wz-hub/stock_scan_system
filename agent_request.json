@@ -1,0 +1,8 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "请使用 feishu_update_doc 工具更新飞书文档：\n- doc_id: Kekcdlaypo4wwrxQjuccRFk6nyh\n- mode: overwrite\n- markdown: 读取 /home/wz/.openclaw/workspace/ml_trading/DOC_CONTENT.md 文件的全部内容\n\n请执行这个任务并返回结果。"
+    }
+  ]
+}
