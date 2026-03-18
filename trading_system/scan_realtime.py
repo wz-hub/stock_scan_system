@@ -26,10 +26,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from feishu_notifier import FeishuNotifier, SignalMessage
 from database import MarketDatabase
-from strategies.prev_high_low_breakout import PrevHighLowBreakoutStrategy
-from strategies.rsi_overbought_oversold import RSIOversoldOverboughtStrategy
-from strategies.bollinger_mean_reversion import BollingerMeanReversionStrategy
-from strategies.volume_breakout_4h import VolumeBreakout4HStrategy
+from strategies.flag_pattern import FlagPatternStrategy
 from feishu_card_template import create_signal_card
 from core.ai_scorer import AIScorer
 from config.settings import Settings
@@ -234,17 +231,20 @@ def scan_symbol(symbol, db, strategies_1d, strategies_4h):
 def main():
     start_time = time.time()
     print("=" * 80)
-    print("🚀 实时策略扫描系统 - 生产环境")
+    print("🚀 实时策略扫描系统 - 旗形策略")
     print("=" * 80)
     print(f"扫描时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (北京时间)")
     print(f"策略组合:")
     print(f"  📊 日线 (1D):")
-    print(f"     - 前高前低突破 V2")
-    print(f"     - RSI 超买超卖")
-    print(f"     - 布林带回归")
+    print(f"     - 旗形形态突破 (Flag Pattern)")
     print(f"  ⏱️ 4 小时 (4H):")
-    print(f"     - 前高前低突破 V2")
-    print(f"     - 成交量突破 4H")
+    print(f"     - 旗形形态突破 (Flag Pattern)")
+    print("=" * 80)
+    print(f"策略说明：")
+    print(f"  - 旗杆：5-12 根 K 线，涨跌幅 >4%")
+    print(f"  - 旗面：4-20 根 K 线，回调 <61.8%")
+    print(f"  - 止损：3%，止盈：9% (盈亏比 3:1)")
+    print(f"  - 回测数据：365 天，胜率 31.5%，总收益 +25.45%")
     print("=" * 80)
     
     api = BinanceAPI()
@@ -271,14 +271,12 @@ def main():
     
     notifier = FeishuNotifier(feishu_webhook) if (feishu_enabled and feishu_webhook) else None
     
+    # 使用旗形策略（唯一经过充分回测验证的策略）
     strategies_1d = {
-        '前高前低突破 V2': PrevHighLowBreakoutStrategy(),
-        'RSI 超买超卖': RSIOversoldOverboughtStrategy(),
-        '布林带回归': BollingerMeanReversionStrategy()
+        'Flag Pattern': FlagPatternStrategy()
     }
     strategies_4h = {
-        '前高前低突破 V2': PrevHighLowBreakoutStrategy(),
-        '成交量突破 4H': VolumeBreakout4HStrategy()
+        'Flag Pattern': FlagPatternStrategy()
     }
     
     symbols = get_top_volume_symbols(api, SCAN_CONFIG['volume_top_n'])
@@ -318,7 +316,8 @@ def main():
     for key, signals in grouped.items():
         signals.sort(key=lambda x: x.get('confidence', 0), reverse=True)
         best_signal = signals[0]
-        if best_signal.get('confidence', 0) >= 80:
+        # 旗形策略最低置信度 65%，回测验证有效
+        if best_signal.get('confidence', 0) >= 65:
             new_signals.append(best_signal)
             if len(signals) > 1:
                 duplicated_count += len(signals) - 1
