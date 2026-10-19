@@ -2,8 +2,9 @@
   "enabled": true,
   "provider": "dashscope",
   "api_url": "https://coding.dashscope.aliyuncs.com/v1/chat/completions",
-  "api_key": "sk-sp-5c84ca223f9d49c48ebb55eb6539d559",
+  "api_key": "",
   "model": "qwen3.5-plus",
   "temperature": 0.3,
-  "max_tokens": 1000
+  "max_tokens": 1000,
+  "_comment": "api_key 留空,运行时从环境变量 DASHSCOPE_API_KEY 读取。本仓库为公开仓库,切勿把真实密钥写回此文件。"
 }

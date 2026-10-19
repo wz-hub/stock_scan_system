@@ -6,7 +6,9 @@ __pycache__/
 .Python
 venv/
 env/
-.env
+# 用 .env* 而非 .env —— 后者拦不住 .env.bak_xxx / .env.local 等变体
+.env*
+!.env.example
 
 # 数据库缓存
 cache/*.db
@@ -14,9 +16,12 @@ cache/*.json
 !cache/.gitkeep
 
 # 配置文件（含敏感信息）
-MEMORY.md
-config/*.json
+# 必须是 **/config/ 才能覆盖 trading_system/config/ 这类子目录；
+# 原来的 config/*.json 只匹配仓库根目录，导致 trading_system/config/ai_config.json 被提交。
+**/config/*.json
 !config/.gitkeep
+!**/config/*.example.json
+MEMORY.md
 
 # 日志
 *.log

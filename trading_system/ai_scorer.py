@@ -20,22 +20,31 @@ class AIScorer:
         self.enabled = self.config.get('enabled', False)
     
     def _load_config(self) -> Dict:
-        """加载配置"""
+        """加载配置
+
+        密钥优先取环境变量 DASHSCOPE_API_KEY，其次才是 config/ai_config.json。
+        配置文件在本仓库中是公开的，真实密钥只能放环境变量。
+        """
+        import os
         config_file = Path('config/ai_config.json')
         if config_file.exists():
             with open(config_file) as f:
-                return json.load(f)
-        
-        # 默认配置 - 通义千问
-        return {
-            "enabled": False,
-            "provider": "dashscope",  # dashscope/deepseek/openai
-            "api_url": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
-            "api_key": "",
-            "model": "qwen-plus",
-            "max_tokens": 1000,
-            "temperature": 0.3
-        }
+                cfg = json.load(f)
+        else:
+            # 默认配置 - 通义千问
+            cfg = {
+                "enabled": False,
+                "provider": "dashscope",  # dashscope/deepseek/openai
+                "api_url": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+                "api_key": "",
+                "model": "qwen-plus",
+                "max_tokens": 1000,
+                "temperature": 0.3
+            }
+        env_key = os.getenv("DASHSCOPE_API_KEY", "").strip()
+        if env_key:
+            cfg["api_key"] = env_key
+        return cfg
     
     def save_config(self, config: Dict):
         """保存配置"""
